@@ -1,0 +1,63 @@
+# ReelForge Configuration
+
+# Script Generation (Using Gemini via OpenAI-compatible endpoint)
+script:
+  provider: "gemini"
+  base_url: "https://generativelanguage.googleapis.com/v1beta/openai/"
+  model: "gemini-2.5-flash"
+  temperature: 0.7
+  max_tokens: 1000
+
+# Text-to-Speech
+tts:
+  engine: "edge"  # Using EdgeTTS (free, no API key needed)
+  voice: "en-US-AndrewNeural"  # Male voice (more energetic than Christopher)
+  rate: "+15%"  # Faster for social media (was +5%, now +15%)
+  pitch: "+0Hz"
+
+  # Alternative voices to try (more natural sounding):
+  # Male: en-US-GuyNeural, en-US-EricNeural, en-US-AndrewNeural
+  # Female: en-US-JennyNeural, en-US-AriaNeural, en-US-MichelleNeural
+
+# Video Settings
+video:
+  resolution:
+    width: 1080
+    height: 1920
+  fps: 30
+  duration: 60  # seconds
+
+# Assets
+assets:
+  backgrounds:
+    - "assets/backgrounds/subway_surfer.mp4"
+    - "assets/backgrounds/part_00.mp4"
+    - "assets/backgrounds/part_01.mp4"
+    - "assets/backgrounds/part_02.mp4"
+    - "assets/backgrounds/part_03.mp4"
+    - "assets/backgrounds/part_04.mp4"
+    - "assets/backgrounds/part_05.mp4"
+    - "assets/backgrounds/part_06.mp4"
+  characters:
+    - "assets/characters/character.png"
+    - "assets/characters/character-2.png"
+  fonts:
+    main: "assets/fonts/Poppins/Poppins-ExtraBold.ttf"
+
+# Caption Settings
+captions:
+  font_size: 80
+  font_color: "white"
+  stroke_color: "black"
+  stroke_width: 3
+  position: "center"  # top, center, bottom
+  max_words_per_line: 3
+  animation: "word"  # word, line, none
+
+# Output
+output:
+  directory: "output"
+  format: "mp4"
+  codec: "libx264"
+  audio_codec: "aac"
+  bitrate: "8000k"
