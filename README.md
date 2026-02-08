@@ -140,6 +140,27 @@ python main.py generate "Your Topic" -s solo
 ```
 *Coming soon: End-to-end generation*
 
+### `drive-auth` - Google Drive OAuth Setup
+```bash
+python main.py drive-auth
+```
+Runs the one-time Google OAuth browser flow and writes a token JSON file.
+
+### Google Drive Auto Upload
+Enable upload after successful `generate` runs via `config.yaml`:
+```yaml
+integrations:
+  google_drive:
+    enabled: true
+    parent_folder_id: "1rw-msgfUfL1K8PFEZs4eKvKKE4bmWQ82"
+    oauth:
+      client_secret_path: ".secrets/client_secret.json"
+      token_path: ".secrets/google_drive_token.json"
+```
+Folder organization in Drive:
+- `YYYY/MM/DD/run_<timestamp>[_run-name]/video.mp4`
+- `YYYY/MM/DD/run_<timestamp>[_run-name]/metadata.json`
+
 ## 📁 Project Structure
 
 ```
@@ -181,7 +202,10 @@ gemini_api_key: "your-key-here"
 
 # Script Generation
 script:
-  model: "gemini-2.0-flash"
+  model: "gemini-2.5-pro"
+  fallback_models:
+    - "gemini-2.5-flash"
+    - "gemini-2.0-flash"
   temperature: 0.7
 
 # TTS Settings

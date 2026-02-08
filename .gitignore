@@ -42,6 +42,7 @@ output/
 *.mp3
 *.wav
 .env
+.secrets/
 config.local.yaml
 
 # OS

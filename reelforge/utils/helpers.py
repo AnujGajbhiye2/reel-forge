@@ -6,7 +6,12 @@ import os
 import yaml
 from pathlib import Path
 from typing import Dict, Any
-from dotenv import load_dotenv
+
+try:
+    from dotenv import load_dotenv
+except ImportError:  # pragma: no cover - optional fallback for minimal envs
+    def load_dotenv() -> bool:
+        return False
 
 
 def load_config(config_path: str = "config.yaml") -> Dict[str, Any]:
@@ -38,6 +43,18 @@ def load_config(config_path: str = "config.yaml") -> Dict[str, Any]:
     # Override with environment variables if present
     if os.getenv('GEMINI_API_KEY'):
         config['gemini_api_key'] = os.getenv('GEMINI_API_KEY')
+
+    drive_cfg = config.setdefault("integrations", {}).setdefault("google_drive", {})
+    oauth_cfg = drive_cfg.setdefault("oauth", {})
+    drive_enabled = os.getenv("GOOGLE_DRIVE_ENABLED")
+    if drive_enabled is not None:
+        drive_cfg["enabled"] = drive_enabled.strip().lower() in {"1", "true", "yes", "on"}
+    if os.getenv("GOOGLE_DRIVE_PARENT_FOLDER_ID"):
+        drive_cfg["parent_folder_id"] = os.getenv("GOOGLE_DRIVE_PARENT_FOLDER_ID")
+    if os.getenv("GOOGLE_OAUTH_CLIENT_SECRET_PATH"):
+        oauth_cfg["client_secret_path"] = os.getenv("GOOGLE_OAUTH_CLIENT_SECRET_PATH")
+    if os.getenv("GOOGLE_OAUTH_TOKEN_PATH"):
+        oauth_cfg["token_path"] = os.getenv("GOOGLE_OAUTH_TOKEN_PATH")
 
     return config
 

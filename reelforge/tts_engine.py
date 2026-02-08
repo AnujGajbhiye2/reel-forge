@@ -4,7 +4,7 @@ Text-to-speech engine using EdgeTTS.
 
 import asyncio
 import os
-from typing import Dict, Any, Optional, List
+from typing import Dict, Any, Optional, List, Tuple, Union
 from pathlib import Path
 import edge_tts
 
@@ -114,8 +114,9 @@ class TTSEngine:
         self,
         dialogue: Dict[str, list],
         output_path: str,
-        voice_mapping: Optional[Dict[str, str]] = None
-    ) -> Path:
+        voice_mapping: Optional[Dict[str, str]] = None,
+        return_timeline: bool = False
+    ) -> Union[Path, Tuple[Path, List[Dict[str, Any]]]]:
         """
         Synthesize dialogue with different voices for each character.
 
@@ -134,12 +135,12 @@ class TTSEngine:
         Raises:
             Exception: If TTS synthesis fails
         """
-        # Default voice mapping if not provided
+        # Default voice mapping if not provided.
         if voice_mapping is None:
-            voice_mapping = {
-                "A": "en-US-GuyNeural",      # Male voice for character A
-                "B": "en-US-JennyNeural",    # Female voice for character B
-            }
+            voices = ["en-US-GuyNeural", "en-US-JennyNeural", self.voice]
+            voice_mapping = {}
+            for idx, character in enumerate(dialogue.keys()):
+                voice_mapping[character] = voices[idx] if idx < len(voices) else self.voice
 
         # Ensure output directory exists
         output_dir = os.path.dirname(output_path) or '.'
@@ -153,6 +154,8 @@ class TTSEngine:
             # Generate audio for each line
             temp_files = []
             audio_clips = []
+            timeline: List[Dict[str, Any]] = []
+            current_time = 0.0
 
             # Get all characters and interleave their lines
             all_chars = list(dialogue.keys())
@@ -173,7 +176,16 @@ class TTSEngine:
                         await self.synthesize(text, temp_file, voice=voice)
 
                         # Load audio clip
-                        audio_clips.append(AudioFileClip(temp_file))
+                        clip = AudioFileClip(temp_file)
+                        audio_clips.append(clip)
+                        line_duration = float(clip.duration)
+                        timeline.append({
+                            "speaker": char,
+                            "text": text,
+                            "start": current_time,
+                            "end": current_time + line_duration,
+                        })
+                        current_time += line_duration
 
                         line_index += 1
 
@@ -195,7 +207,10 @@ class TTSEngine:
             if os.path.exists(temp_dir) and not os.listdir(temp_dir):
                 os.rmdir(temp_dir)
 
-            return Path(output_path)
+            result_path = Path(output_path)
+            if return_timeline:
+                return result_path, timeline
+            return result_path
 
         except Exception as e:
             raise Exception(f"Dialogue TTS synthesis failed: {str(e)}")
@@ -204,8 +219,9 @@ class TTSEngine:
         self,
         dialogue: Dict[str, list],
         output_path: str,
-        voice_mapping: Optional[Dict[str, str]] = None
-    ) -> Path:
+        voice_mapping: Optional[Dict[str, str]] = None,
+        return_timeline: bool = False
+    ) -> Union[Path, Tuple[Path, List[Dict[str, Any]]]]:
         """
         Synchronous wrapper for synthesize_dialogue().
 
@@ -217,7 +233,7 @@ class TTSEngine:
         Returns:
             Path to generated audio file
         """
-        return asyncio.run(self.synthesize_dialogue(dialogue, output_path, voice_mapping))
+        return asyncio.run(self.synthesize_dialogue(dialogue, output_path, voice_mapping, return_timeline))
 
     @staticmethod
     async def list_voices() -> List[Dict[str, str]]:

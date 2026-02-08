@@ -1,10 +1,16 @@
 # ReelForge Configuration
 
-# Script Generation (Using Gemini via OpenAI-compatible endpoint)
+# App Runtime
+app:
+  mode: "dev"  # dev or prod
+
+# Script Generation (Native Google Gemini SDK)
 script:
   provider: "gemini"
-  base_url: "https://generativelanguage.googleapis.com/v1beta/openai/"
-  model: "gemini-2.5-flash"
+  model: "gemini-2.5-pro"
+  fallback_models:
+    - "gemini-2.5-flash"
+    - "gemini-2.0-flash"
   temperature: 0.7
   max_tokens: 1000
 
@@ -18,14 +24,6 @@ tts:
   # Alternative voices to try (more natural sounding):
   # Male: en-US-GuyNeural, en-US-EricNeural, en-US-AndrewNeural
   # Female: en-US-JennyNeural, en-US-AriaNeural, en-US-MichelleNeural
-
-# Video Settings
-video:
-  resolution:
-    width: 1080
-    height: 1920
-  fps: 30
-  duration: 60  # seconds
 
 # Assets
 assets:
@@ -53,6 +51,26 @@ captions:
   position: "center"  # top, center, bottom
   max_words_per_line: 3
   animation: "word"  # word, line, none
+  safe_zone:
+    top_margin_px: 140
+    bottom_margin_px: 320
+    side_margin_px: 90
+    anchor: "upper_middle"
+
+# Generation Rules
+generation:
+  duration:
+    min_seconds: 45
+    max_seconds: 60
+    max_retries: 5
+
+# Logging
+logging:
+  dir: "logs"
+  level_dev: "DEBUG"
+  level_prod: "WARNING"
+  console_dev: true
+  console_prod: false
 
 # Output
 output:
@@ -61,3 +79,43 @@ output:
   codec: "libx264"
   audio_codec: "aac"
   bitrate: "8000k"
+
+# Video Settings
+video:
+  resolution:
+    width: 1080
+    height: 1920
+  fps: 30
+  duration: 60  # seconds
+  framing:
+    mode: "fit_blur"  # fit_blur, crop
+    blur_sigma: 18
+    dim_opacity: 0.28
+  layout:
+    top_reserved_px: 420
+  characters:
+    left_x_ratio: 0.08
+    right_x_ratio: 0.60
+    bottom_y_px: 460
+    active_opacity: 1.0
+    inactive_opacity: 0.05
+    inactive_mode: "hidden"  # hidden, dim
+
+# Integrations
+integrations:
+  google_drive:
+    enabled: false
+    parent_folder_id: "1rw-msgfUfL1K8PFEZs4eKvKKE4bmWQ82"
+    upload_on: "successful_runs"
+    upload_files:
+      - "video"
+      - "metadata"
+    failure_policy: "warn"  # warn, fail
+    scopes:
+      - "https://www.googleapis.com/auth/drive.file"
+    oauth:
+      client_secret_path: ".secrets/client_secret.json"
+      token_path: ".secrets/google_drive_token.json"
+    retries:
+      max_attempts: 3
+      backoff_seconds: 2.0
