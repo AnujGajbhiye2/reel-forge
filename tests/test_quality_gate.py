@@ -76,3 +76,46 @@ def test_assess_output_quality_trash_for_critical_coverage_failure():
         max_word_target=50,
     )
     assert result["quality_verdict"] == "trash"
+
+
+def test_assess_output_quality_needs_work_for_screenshot_shortfall():
+    script = "A: one two three four five six seven eight nine ten\nB: one two three four five six seven eight nine ten"
+    captions = [{"word": "w"}] * 20
+    result = _assess_output_quality(
+        script_text=script,
+        style="dialogue",
+        duration_seconds=52.0,
+        min_duration=45,
+        max_duration=60,
+        word_captions=captions,
+        min_word_target=10,
+        max_word_target=50,
+        screenshot_enabled=True,
+        screenshot_target_count=5,
+        screenshot_captured_count=3,
+        screenshot_gold_coverage_min=0.8,
+    )
+    assert result["quality_verdict"] == "needs_work"
+    assert result["screenshot_coverage_ratio"] == 0.6
+
+
+def test_assess_output_quality_uses_effective_target_count_denominator():
+    script = "A: one two three four five six seven eight nine ten\nB: one two three four five six seven eight nine ten"
+    captions = [{"word": "w"}] * 20
+    result = _assess_output_quality(
+        script_text=script,
+        style="dialogue",
+        duration_seconds=52.0,
+        min_duration=45,
+        max_duration=60,
+        word_captions=captions,
+        min_word_target=10,
+        max_word_target=50,
+        screenshot_enabled=True,
+        screenshot_target_count=5,
+        screenshot_effective_target_count=3,
+        screenshot_captured_count=2,
+        screenshot_gold_coverage_min=0.8,
+    )
+    assert result["quality_verdict"] == "needs_work"
+    assert result["screenshot_coverage_ratio"] == 0.667

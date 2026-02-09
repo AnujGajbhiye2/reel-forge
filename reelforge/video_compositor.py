@@ -17,18 +17,27 @@ try:
         CompositeVideoClip,
         concatenate_videoclips,
     )
-except ImportError:
-    from moviepy.editor import (
-        VideoFileClip,
-        AudioFileClip,
-        ImageClip,
-        TextClip,
-        ColorClip,
-        CompositeVideoClip,
-        concatenate_videoclips,
-    )
+except Exception:  # pragma: no cover - fallback for lightweight test stubs
+    try:
+        from moviepy.editor import (
+            VideoFileClip,
+            AudioFileClip,
+            ImageClip,
+            TextClip,
+            ColorClip,
+            CompositeVideoClip,
+            concatenate_videoclips,
+        )
+    except Exception:  # pragma: no cover - allows import when moviepy is stubbed
+        def _missing_moviepy(*_args, **_kwargs):
+            raise ImportError("moviepy is required for video composition operations")
 
-from reelforge.logging_utils import get_logger
+        VideoFileClip = AudioFileClip = ImageClip = TextClip = ColorClip = CompositeVideoClip = _missing_moviepy
+
+        def concatenate_videoclips(*_args, **_kwargs):
+            raise ImportError("moviepy is required for video composition operations")
+
+from reelforge.core.logging import get_logger
 
 
 class VideoCompositor:
@@ -303,6 +312,60 @@ class VideoCompositor:
 
         return overlays
 
+    def create_screenshot_clips(
+        self,
+        screenshots_data: List[Dict[str, Any]],
+        duration: float,
+    ) -> List[ImageClip]:
+        """
+        Create timed screenshot card overlays.
+        """
+        if not screenshots_data:
+            return []
+
+        overlay_cfg = self.config.get("research", {}).get("overlay", {})
+        width_ratio = float(overlay_cfg.get("width_ratio", 0.78))
+        y_px = int(overlay_cfg.get("y_px", self.config.get("video", {}).get("layout", {}).get("top_reserved_px", 420) - 280))
+        crossfade_sec = float(overlay_cfg.get("crossfade_sec", 0.2))
+
+        card_w = max(1, int(self.resolution[0] * width_ratio))
+        clips: List[ImageClip] = []
+
+        for shot in screenshots_data:
+            if shot.get("status") != "ok":
+                continue
+            image_path = shot.get("file")
+            if not image_path or not os.path.exists(image_path):
+                continue
+
+            start = max(0.0, float(shot.get("start", 0.0)))
+            end = min(float(duration), float(shot.get("end", duration)))
+            clip_duration = max(0.01, end - start)
+            if clip_duration <= 0:
+                continue
+
+            image = ImageClip(image_path).resized(width=card_w)
+            x = (self.resolution[0] - image.w) // 2
+            y = max(40, y_px)
+            image = image.with_position((x, y)).with_start(start).with_duration(clip_duration)
+            if hasattr(image, "with_opacity"):
+                image = image.with_opacity(1.0)
+            if crossfade_sec > 0 and hasattr(image, "crossfadein") and hasattr(image, "crossfadeout"):
+                image = image.crossfadein(crossfade_sec).crossfadeout(crossfade_sec)
+
+            shadow = ColorClip(
+                size=(image.w + 26, image.h + 26),
+                color=(0, 0, 0),
+            ).with_opacity(0.28).with_position((x - 6, y + 10)).with_start(start).with_duration(clip_duration)
+            panel = ColorClip(
+                size=(image.w + 14, image.h + 14),
+                color=(18, 18, 18),
+            ).with_opacity(0.55).with_position((x - 7, y - 7)).with_start(start).with_duration(clip_duration)
+
+            clips.extend([shadow, panel, image])
+
+        return clips
+
     def compose_video(
         self,
         audio_path: str,
@@ -311,7 +374,8 @@ class VideoCompositor:
         background_path: Optional[str] = None,
         character_path: Optional[str] = None,
         secondary_character_path: Optional[str] = None,
-        speaker_timeline: Optional[List[Dict[str, Any]]] = None
+        speaker_timeline: Optional[List[Dict[str, Any]]] = None,
+        screenshots_data: Optional[List[Dict[str, Any]]] = None,
     ) -> Path:
         """
         Compose final video from all components.
@@ -357,6 +421,7 @@ class VideoCompositor:
             # Combine all layers
             all_clips = [bg_clip] + caption_clips
             character_clips: List[ImageClip] = []
+            screenshot_clips: List[ImageClip] = []
 
             if (
                 character_path
@@ -378,6 +443,11 @@ class VideoCompositor:
                 char = char.with_position(('center', self.resolution[1] - 450))
                 character_clips = [char]
                 all_clips.insert(1, char)  # Add after background, before captions
+
+            if screenshots_data:
+                screenshot_clips = self.create_screenshot_clips(screenshots_data, duration)
+                if screenshot_clips:
+                    all_clips = [bg_clip] + character_clips + screenshot_clips + caption_clips
 
             # Composite
             final = CompositeVideoClip(all_clips, size=self.resolution)
@@ -401,6 +471,8 @@ class VideoCompositor:
             for clip in caption_clips:
                 clip.close()
             for clip in character_clips:
+                clip.close()
+            for clip in screenshot_clips:
                 clip.close()
 
             return Path(output_path)

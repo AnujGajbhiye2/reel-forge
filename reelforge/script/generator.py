@@ -4,9 +4,9 @@ Script generation module using LLM APIs.
 
 import re
 from typing import Dict, Any, Optional
-from reelforge.logging_utils import get_logger
+from reelforge.core.logging import get_logger
 
-from reelforge.templates.script_prompts import SOLO_NARRATOR_PROMPT, DIALOGUE_PROMPT
+from reelforge.script.templates.prompts import SOLO_NARRATOR_PROMPT, DIALOGUE_PROMPT
 
 
 class ScriptGenerator:

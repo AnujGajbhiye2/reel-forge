@@ -1,0 +1,253 @@
+"""
+MCP-based script generator with screenshot markers.
+"""
+import logging
+import re
+from typing import Any, Dict, Optional
+
+from reelforge.script.types import ScriptWithMarkers, parse_mcp_output
+from reelforge.script.templates.prompts import MCP_DIALOGUE_PROMPT
+
+logger = logging.getLogger(__name__)
+
+
+class MCPScriptGenerator:
+    """
+    Script generator using MCP prompt with direct Gemini SDK.
+
+    Generates dialogue scripts with embedded [SHOW:S#] markers for screenshot placement.
+    """
+
+    def __init__(self, config: Dict[str, Any]):
+        """
+        Initialize MCP generator.
+
+        Args:
+            config: Configuration dictionary from config.yaml
+        """
+        self.config = config
+        self.script_config = config.get("script", {})
+
+        # Gemini configuration
+        self.gemini_model = self.script_config.get("model", "gemini-2.5-pro")
+        self.temperature = self.script_config.get("temperature", 0.7)
+        self.max_tokens = self.script_config.get("max_tokens", 1000)
+
+        # Compatibility with orchestrator interface
+        self.model = self.gemini_model
+        self.models = [self.model] + self.script_config.get("fallback_models", [])
+
+    def generate(
+        self,
+        topic: str,
+        details: Optional[str] = None,
+        style: str = "dialogue",
+        websites: Optional[str] = None,
+        length: str = "45s",
+        profanity: str = "none",
+        model: Optional[str] = None,
+    ) -> ScriptWithMarkers:
+        """
+        Generate script with screenshot markers.
+
+        Args:
+            topic: Main topic for the reel
+            details: Optional additional context
+            style: Script style (only "dialogue" supported for MCP)
+            websites: Optional comma-separated list of websites/tools to feature
+            length: Target length (30s, 45s, 60s)
+            profanity: Profanity level (none, light, allowed)
+            model: Optional model override
+
+        Returns:
+            ScriptWithMarkers with dialogue, keyword map, and marker positions
+
+        Raises:
+            RuntimeError: If Gemini API fails
+        """
+        if style != "dialogue":
+            logger.warning("MCP generator only supports dialogue style, got: %s", style)
+            # Continue with dialogue mode anyway
+
+        logger.info("Generating script via direct Gemini with MCP prompt")
+        return self._generate(topic, details, websites, length, profanity, model)
+
+    def _generate(
+        self,
+        topic: str,
+        details: Optional[str],
+        websites: Optional[str],
+        length: str,
+        profanity: str,
+        model: Optional[str] = None,
+    ) -> ScriptWithMarkers:
+        """
+        Use direct Gemini SDK with embedded MCP prompt.
+
+        Args:
+            topic: Main topic
+            details: Optional additional context
+            websites: Optional comma-separated websites
+            length: Target length
+            profanity: Profanity level
+            model: Optional model override
+
+        Returns:
+            Parsed ScriptWithMarkers
+
+        Raises:
+            RuntimeError: If Gemini API fails
+        """
+        try:
+            from google import genai
+            from google.genai import types
+        except ImportError as exc:
+            raise RuntimeError(
+                "google-genai not installed. Install: pip install google-genai"
+            ) from exc
+
+        # Get API key
+        api_key = self.config.get("gemini_api_key")
+        if not api_key:
+            raise RuntimeError(
+                "Gemini API key not found. Set in config.yaml or GEMINI_API_KEY env var"
+            )
+
+        # Build prompt
+        websites_instruction = ""
+        if websites:
+            websites_instruction = f"REQUIRED: Must mention and show these specific websites/tools: {websites}"
+
+        prompt_text = MCP_DIALOGUE_PROMPT.format(
+            length=length,
+            topic=topic,
+            websites_instruction=websites_instruction,
+            profanity=profanity,
+        )
+
+        if details:
+            prompt_text += f"\n\nAdditional context:\n{details}"
+
+        # Call Gemini (use provided model or default)
+        model_to_use = model or self.gemini_model
+        logger.debug("Calling Gemini API with model: %s", model_to_use)
+
+        client = genai.Client(api_key=api_key)
+
+        response = client.models.generate_content(
+            model=model_to_use,
+            contents=prompt_text,
+            config=types.GenerateContentConfig(
+                temperature=self.temperature,
+                max_output_tokens=self.max_tokens,
+            ),
+        )
+
+        if not response or not response.text:
+            raise RuntimeError(
+                "Gemini returned empty response. This may be due to:\n"
+                "1. API rate limiting\n"
+                "2. Prompt safety filters\n"
+                "3. Network issues\n"
+                "Try again or check your API quota."
+            )
+
+        script_text = response.text.strip()
+
+        if len(script_text) < 50:
+            raise RuntimeError(
+                f"Gemini returned very short response ({len(script_text)} chars): {script_text[:100]}\n"
+                "This usually indicates a prompt/API issue."
+            )
+
+        # Remove markdown code blocks if present
+        if script_text.startswith("```"):
+            lines = script_text.split('\n')
+            script_text = '\n'.join(lines[1:-1]) if len(lines) > 2 else script_text
+
+        # Parse output
+        script_with_markers = parse_mcp_output(script_text)
+        logger.info("Gemini generated script with %d markers", len(script_with_markers.keyword_map))
+
+        return script_with_markers
+
+    def parse_dialogue(self, script_text: str) -> Dict[str, list]:
+        """
+        Parse dialogue script into character lines.
+
+        Args:
+            script_text: Script text (may contain [SHOW:S#] markers)
+
+        Returns:
+            Dictionary mapping character names to their lines
+        """
+        dialogue = {}
+        lines = script_text.strip().split('\n')
+
+        for line in lines:
+            line = line.strip()
+            if not line or line.startswith('REEL TITLE:'):
+                continue
+
+            # Try multiple formats: A:, [A], (A)
+            patterns = [
+                r'^([A-Za-z]):\s*(.+)$',  # A: text
+                r'^\[([A-Za-z])\]\s*(.+)$',  # [A] text
+                r'^\(([A-Za-z])\)\s*(.+)$',  # (A) text
+            ]
+
+            for pattern in patterns:
+                match = re.match(pattern, line)
+                if match:
+                    char, text = match.groups()
+                    if char not in dialogue:
+                        dialogue[char] = []
+                    dialogue[char].append(text)
+                    break
+
+        return dialogue
+
+    def expand_short_script(
+        self,
+        topic: str,
+        short_script: str,
+        style: str,
+        min_words: int,
+        max_words: int,
+        details: Optional[str] = None,
+        model: Optional[str] = None,
+    ) -> str:
+        """
+        Expand short script while preserving markers.
+
+        Args:
+            topic: Topic/subject
+            short_script: Script to expand
+            style: "dialogue" or "solo"
+            min_words: Minimum word count
+            max_words: Maximum word count
+            details: Optional additional context
+            model: Optional model override
+
+        Returns:
+            Expanded script text
+        """
+        # For MCP mode, we regenerate with stricter word count constraints
+        # This preserves markers better than trying to expand existing text
+
+        logger.info("Expanding short script by regenerating with stricter constraints")
+
+        # Add word count constraint to details
+        constraint = f"CRITICAL: Script must be between {min_words} and {max_words} words. Previous attempt was too short."
+        enhanced_details = f"{details or ''}\n{constraint}".strip()
+
+        # Regenerate (this will return ScriptWithMarkers)
+        result = self.generate(
+            topic=topic,
+            details=enhanced_details,
+            style=style,
+            model=model,
+        )
+
+        # Return dialogue text (markers are preserved in the ScriptWithMarkers object)
+        return result.dialogue_text

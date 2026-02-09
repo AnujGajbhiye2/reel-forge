@@ -3,7 +3,7 @@ Tests for script generation module.
 """
 
 import pytest
-from reelforge.script_generator import ScriptGenerator
+from reelforge.script.generator import ScriptGenerator
 
 
 class TestScriptGenerator:
@@ -201,7 +201,7 @@ class TestScriptGeneratorIntegration:
 
     def test_generate_solo_script(self):
         """Test solo script generation with real API."""
-        from reelforge.utils import load_config
+        from reelforge.shared.config import load_config
 
         try:
             config = load_config('config.yaml')
@@ -227,7 +227,7 @@ class TestScriptGeneratorIntegration:
 
     def test_generate_dialogue_script(self):
         """Test dialogue script generation with real API."""
-        from reelforge.utils import load_config
+        from reelforge.shared.config import load_config
 
         try:
             config = load_config('config.yaml')

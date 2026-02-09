@@ -13,3 +13,9 @@ whisperx @ git+https://github.com/m-bain/whisperx.git
 google-api-python-client>=2.0.0
 google-auth-oauthlib>=1.2.0
 google-auth-httplib2>=0.2.0
+playwright>=1.49.0
+ddgs>=9.0.0
+
+# Media-harvest integration (local development)
+# Install with: cd /home/anuj/projects/screen-scraper && pip install -e .
+# media-harvest @ file:///home/anuj/projects/screen-scraper

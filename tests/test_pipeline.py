@@ -4,7 +4,7 @@ Test suite for ReelForge pipeline.
 
 import pytest
 from pathlib import Path
-from reelforge.utils import load_config, ensure_dir
+from reelforge.shared.config import load_config, ensure_dir
 
 
 class TestConfiguration:

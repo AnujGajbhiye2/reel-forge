@@ -1,0 +1,14 @@
+{
+  "mcpServers": {
+    "reelforge-writer": {
+      "type": "stdio",
+      "command": "/home/anuj/.claude/mcp-servers/reelforge-writer/venv/bin/python",
+      "args": [
+        "/home/anuj/.claude/mcp-servers/reelforge-writer/server.py"
+      ],
+      "env": {
+        "GEMINI_API_KEY": "AIzaSyBTquZqTTPfG-FnxH0SpgTuuk_YHmZfBt8"
+      }
+    }
+  }
+}

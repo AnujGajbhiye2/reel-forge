@@ -2,7 +2,7 @@ from pathlib import Path
 
 import pytest
 
-from reelforge.google_drive_uploader import GoogleDriveUploader, _extract_folder_id
+from reelforge.integrations.google_drive.uploader import GoogleDriveUploader, _extract_folder_id
 
 
 def test_extract_folder_id_from_url():

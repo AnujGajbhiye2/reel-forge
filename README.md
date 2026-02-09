@@ -166,17 +166,23 @@ Folder organization in Drive:
 ```
 reelforge/
 ├── config.yaml              # Configuration (API keys, settings)
-├── main.py                  # CLI entry point
+├── main.py                  # Backward-compatible CLI entrypoint
 ├── requirements.txt         # Python dependencies
+├── docs/
+│   └── architecture/
+│       └── reorg-plan.md    # Codebase reorganization record
 ├── reelforge/
-│   ├── script_generator.py  # ✅ LLM script generation
-│   ├── tts_engine.py        # 🔄 Text-to-speech
-│   ├── caption_generator.py # ⏳ WhisperX captions
-│   ├── video_compositor.py  # ⏳ MoviePy composition
-│   ├── templates/
-│   │   └── script_prompts.py # Prompt templates
-│   └── utils/
-│       └── helpers.py        # Config & file utilities
+│   ├── cli/                 # Click app and command modules
+│   ├── pipeline/            # Orchestration + quality gates
+│   ├── script/              # Script generation + prompt templates
+│   ├── audio/               # TTS engine
+│   ├── captions/            # WhisperX caption generation
+│   ├── video/               # Canonical video package
+│   ├── research/            # Screenshot research
+│   ├── integrations/        # External services (Google Drive)
+│   ├── core/                # Logging and run-context primitives
+│   ├── shared/              # Shared config/helpers
+│   └── video_compositor.py  # Video compositor implementation
 ├── assets/
 │   ├── backgrounds/         # 8 gameplay clips (Subway Surfers, Minecraft)
 │   ├── characters/          # Character PNGs
@@ -185,6 +191,12 @@ reelforge/
 ├── output/                  # Generated videos and assets
 └── tests/                   # Test suite
 ```
+
+## 🧭 Compatibility Notes
+
+- `python main.py ...` remains the supported CLI entrypoint.
+- Internal imports are now standardized to canonical package paths.
+- Reorganization decisions and migration notes are tracked in `docs/architecture/reorg-plan.md`.
 
 ## 🎨 Assets Included
 
@@ -272,6 +284,7 @@ pytest tests/ -v
 ## 📚 Documentation
 
 - `reelforge-blueprint.md` - Full architecture and implementation plan
+- `docs/architecture/reorg-plan.md` - Code organization decisions and compatibility strategy
 - `PHASE3_COMPLETE.md` - Phase 3 completion summary
 - `config.yaml` - Configuration reference
 

@@ -71,7 +71,7 @@ def test_upload_artifacts_to_drive_warn_policy_on_failure(monkeypatch):
         def upload_run_artifacts(self, **_kwargs):
             raise RuntimeError("upload failed")
 
-    import reelforge.google_drive_uploader as gdu
+    import reelforge.integrations.google_drive.uploader as gdu
 
     monkeypatch.setattr("main._drive_upload_defaults", lambda _cfg: {
         "drive_upload_status": "skipped",
@@ -125,7 +125,7 @@ def test_upload_artifacts_to_drive_fail_policy_raises(monkeypatch):
         def upload_run_artifacts(self, **_kwargs):
             raise RuntimeError("upload failed")
 
-    import reelforge.google_drive_uploader as gdu
+    import reelforge.integrations.google_drive.uploader as gdu
 
     monkeypatch.setattr(gdu, "GoogleDriveUploader", StubUploader)
     try:

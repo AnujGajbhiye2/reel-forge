@@ -63,12 +63,16 @@ def test_caption_y_clamp_respects_bounds():
 
 
 class _FakeClip:
-    def __init__(self, path):
+    def __init__(self, path=None, size=None, color=None):
         self.path = path
+        self.size = size
+        self.color = color
         self.opacity = None
         self.start = None
         self.duration = None
         self.position = None
+        self.w = 640
+        self.h = 360
 
     def with_start(self, value):
         self.start = value
@@ -87,6 +91,12 @@ class _FakeClip:
 
     def with_opacity(self, value):
         self.opacity = value
+        return self
+
+    def crossfadein(self, _value):
+        return self
+
+    def crossfadeout(self, _value):
         return self
 
 
@@ -116,3 +126,23 @@ def test_dialogue_dim_mode_renders_both_speakers(monkeypatch):
     assert len(overlays) == 2
     opacities = sorted(c.opacity for c in overlays)
     assert opacities == [0.05, 1.0]
+
+
+def test_create_screenshot_clips_creates_card_layers(monkeypatch, tmp_path):
+    import reelforge.video_compositor as vc
+
+    monkeypatch.setattr(vc, "ImageClip", _FakeClip)
+    monkeypatch.setattr(vc, "ColorClip", _FakeClip)
+
+    image = tmp_path / "ss.png"
+    image.write_bytes(b"fake")
+
+    compositor = VideoCompositor(_make_config(inactive_mode="hidden"))
+    screenshots = [
+        {"status": "ok", "file": str(image), "start": 1.0, "end": 4.0},
+    ]
+    clips = compositor.create_screenshot_clips(screenshots, duration=10.0)
+
+    assert len(clips) == 3
+    assert all(c.start == 1.0 for c in clips)
+    assert all(c.duration == 3.0 for c in clips)

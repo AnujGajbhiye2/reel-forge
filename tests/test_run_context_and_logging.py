@@ -1,7 +1,7 @@
 from pathlib import Path
 
-from reelforge.logging_utils import setup_logging
-from reelforge.utils.run_context import create_run_paths, slugify_name
+from reelforge.core.logging import setup_logging
+from reelforge.core.run_context import create_run_paths, slugify_name
 
 
 def test_slugify_name():

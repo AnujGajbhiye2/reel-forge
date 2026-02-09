@@ -4,6 +4,14 @@
 
 This document contains the complete research, architecture, and step-by-step implementation plan for building a semi-automated system that produces faceless AI/tech social media reels (TikTok, Instagram Reels, YouTube Shorts) in the style of @algorithmswithpeter on Instagram.
 
+## IMPLEMENTATION NOTE (2026-02-08)
+
+For the current repository folder layout and compatibility shims, see:
+
+- `docs/architecture/reorg-plan.md`
+
+`reorg-plan.md` is the canonical record of code organization changes made after this blueprint.
+
 ### What the final videos look like
 - 60-second vertical reels (1080×1920, 9:16)
 - AI-generated voiceover narrating a tech topic (no real voice)

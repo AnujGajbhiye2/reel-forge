@@ -1,0 +1,16 @@
+REEL TITLE: Top 5 Software Engineering Books
+
+A: Yo, what are the must-read books for devs?
+B: Alright, listen up! [SHOW:S1] Let Us C is where legends are born.
+A: C language? That's ancient!
+B: Ancient but gold. Then there's Clean Code [SHOW:S2] for writing maintainable stuff.
+A: What about design patterns?
+B: Design Principles [SHOW:S3] covers that perfectly. OOP done right.
+A: Any JavaScript books?
+B: JavaScript for Dummies [SHOW:S4] is actually fire for beginners.
+A: What's number five?
+B: Code Complete [SHOW:S5]! The bible of software construction.
+A: Damn, that's a solid list!
+B: Go read them and level up your code game!
+
+S1=Let Us C, S2=Clean Code, S3=Design Principles, S4=JavaScript for Dummies, S5=Code Complete
