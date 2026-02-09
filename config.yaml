@@ -43,6 +43,8 @@ assets:
   characters:
     - "assets/characters/character.png"
     - "assets/characters/character-2.png"
+    - "assets/characters/character-3.png"
+    - "assets/characters/character-4.png"
   fonts:
     main: "assets/fonts/Poppins/Poppins-ExtraBold.ttf"
 
