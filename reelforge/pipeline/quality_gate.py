@@ -80,6 +80,7 @@ def _assess_output_quality(
     screenshot_captured_count: int = 0,
     screenshot_gold_coverage_min: float = 0.80,
     screenshot_effective_target_count: int = 0,
+    custom_script: bool = False,
 ) -> Dict[str, Any]:
     script_word_count = _word_count(script_text)
     caption_word_count = len(word_captions)
@@ -87,10 +88,21 @@ def _assess_output_quality(
     failures: List[str] = []
     critical_failures: List[str] = []
 
-    if not (min_duration <= duration_seconds <= max_duration):
-        critical_failures.append(
-            f"Duration out of target range: {duration_seconds:.2f}s (target {min_duration}-{max_duration}s)."
-        )
+    # For custom scripts, duration/word count are soft warnings, not critical failures.
+    # The user wrote the script themselves and already got a clear warning.
+    duration_tolerance = 3 if custom_script else 0
+    effective_min = min_duration - duration_tolerance
+    effective_max = max_duration + duration_tolerance
+
+    if not (effective_min <= duration_seconds <= effective_max):
+        if custom_script:
+            failures.append(
+                f"Duration outside target range: {duration_seconds:.2f}s (target {min_duration}-{max_duration}s)."
+            )
+        else:
+            critical_failures.append(
+                f"Duration out of target range: {duration_seconds:.2f}s (target {min_duration}-{max_duration}s)."
+            )
 
     if script_word_count < min_word_target:
         failures.append(f"Script too short for style '{style}': {script_word_count} words.")

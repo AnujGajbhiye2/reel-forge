@@ -461,7 +461,8 @@ class VideoCompositor:
                 codec=self.config['output']['codec'],
                 audio_codec=self.config['output']['audio_codec'],
                 preset='medium',
-                threads=4
+                threads=4,
+                logger=None,
             )
 
             # Cleanup

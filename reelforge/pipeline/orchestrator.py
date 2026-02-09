@@ -4,12 +4,20 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import shutil
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
+import click
+
 from reelforge.core.logging import setup_logging
 from reelforge.shared.config import load_config
+
+
+def _strip_markers(text: str) -> str:
+    """Remove [SHOW:S#] markers from script text so TTS doesn't speak them."""
+    return re.sub(r'\s*\[SHOW:S\d+\]', '', text)
 
 from reelforge.pipeline.drive_upload import _drive_upload_defaults, _upload_artifacts_to_drive
 from reelforge.pipeline.outputs import _audio_duration, _build_output_paths, _resolve_duration_bounds, _resolve_mode
@@ -107,21 +115,45 @@ def _run_generate_pipeline(
     enhanced_details = f"{details} {constraints}".strip()
 
     # Handle custom script (skip LLM generation)
+    is_custom_script = bool(custom_script_path)
     if custom_script_path:
         logger.info("Using custom script from: %s", custom_script_path)
         with open(custom_script_path, 'r', encoding='utf-8') as f:
-            script_text = f.read()
+            raw_script = f.read()
 
         # Parse MCP format if markers are present
-        if mcp_mode and '[SHOW:' in script_text:
+        if '[SHOW:' in raw_script:
             from reelforge.script.types import parse_mcp_output
-            script_with_markers = parse_mcp_output(script_text)
-            script_text = script_with_markers.dialogue_text
+            script_with_markers = parse_mcp_output(raw_script)
             keyword_map = script_with_markers.keyword_map
+            # Strip markers from the text that goes to TTS/captions
+            script_text = _strip_markers(script_with_markers.dialogue_text)
             logger.info("Custom script has %d MCP markers", len(keyword_map))
+        else:
+            script_text = raw_script.strip()
 
-        word_count = len(script_text.split())
+        # Strip REEL TITLE lines
+        script_text = re.sub(r'^REEL TITLE:.*\n?', '', script_text, flags=re.MULTILINE).strip()
+
+        from reelforge.pipeline.quality_gate import _word_count
+        word_count = _word_count(script_text)
         logger.info("Custom script loaded with %d words", word_count)
+
+        # Upfront validation with clear feedback
+        hard_min = max(1, min_word_target - 30)  # absolute floor (e.g. 70 for dialogue)
+        hard_max = max_word_target + 40           # absolute ceiling (e.g. 170 for dialogue)
+        if word_count < hard_min:
+            raise RuntimeError(
+                f"Script too short: {word_count} words. "
+                f"Minimum is ~{min_word_target} words for '{style}' style "
+                f"(hard floor: {hard_min}). Please add more content."
+            )
+        if word_count > hard_max:
+            raise RuntimeError(
+                f"Script too long: {word_count} words. "
+                f"Maximum is ~{max_word_target} words for '{style}' style "
+                f"(hard ceiling: {hard_max}). Please shorten your script."
+            )
 
         # Validate script format for dialogue mode
         if style == "dialogue":
@@ -145,6 +177,7 @@ def _run_generate_pipeline(
             handle.write(script_text)
 
         # Generate TTS (skip retry loop)
+        click.echo("Generating audio from script...")
         attempts_used = 1
 
         if style == "dialogue":
@@ -174,16 +207,39 @@ def _run_generate_pipeline(
         final_duration = _audio_duration(str(paths["audio"]))
         logger.info("Custom script audio duration: %.2fs", final_duration)
 
-        # Check if duration is in acceptable range
+        # Warn but don't fail on duration for custom scripts
         if not (lower_bound <= final_duration <= upper_bound):
             logger.warning(
                 "Custom script duration (%.2fs) is outside target range (%d-%ds). "
-                "Consider adjusting your script length.",
+                "Continuing anyway since this is a custom script.",
                 final_duration, lower_bound, upper_bound
             )
 
         duration_accepted = True
         audio_created = True
+
+        # Fetch screenshots for custom scripts with MCP markers
+        if script_with_markers and keyword_map:
+            media_harvest_enabled = cfg.get("media_harvest", {}).get("enabled", True)
+            if media_harvest_enabled:
+                try:
+                    from reelforge.media.harvest_client import MediaHarvestClient
+                    harvest_client = MediaHarvestClient(cfg)
+                    id_to_path = harvest_client.fetch_screenshots(
+                        keyword_map=keyword_map,
+                        output_dir=paths["run_dir"]
+                    )
+                    logger.info("Media harvest fetched %d/%d screenshots",
+                               len(id_to_path), len(keyword_map))
+                except ImportError:
+                    click.echo("WARNING: Media harvester not installed. Continuing without screenshots.")
+                    logger.warning("Media harvest not available")
+                except Exception as exc:
+                    click.echo(f"WARNING: Media harvest failed: {exc}. Continuing without screenshots.")
+                    logger.warning("Media harvest failed: %s", exc)
+
+            if not id_to_path:
+                click.echo("WARNING: No screenshots were fetched. Video will be generated without screenshot overlays.")
 
     # Normal LLM generation with retry loop (skip if custom script provided)
     if not custom_script_path:
@@ -209,7 +265,8 @@ def _run_generate_pipeline(
                         )
                         # Extract script text and markers
                         script_with_markers = result
-                        script_text = result.dialogue_text
+                        # Strip markers so TTS doesn't speak "[SHOW:S1]"
+                        script_text = _strip_markers(result.dialogue_text)
                         keyword_map = result.keyword_map
                         logger.info("MCP generated %d screenshot markers", len(keyword_map))
                     else:
@@ -421,6 +478,7 @@ def _run_generate_pipeline(
                 f"Last failure: {last_failure_reason}"
             )
 
+    click.echo("Generating captions...")
     word_captions = caption_gen.generate_captions(str(paths["audio"]))
     caption_gen.save_captions_json(word_captions, str(paths["captions"]))
     formatted_captions = caption_gen.format_captions(word_captions)
@@ -532,6 +590,7 @@ def _run_generate_pipeline(
         if screenshot_failures:
             logger.warning("Screenshot failures: %s", " | ".join(screenshot_failures))
 
+    click.echo("Composing video...")
     result_video = compositor.compose_video(
         audio_path=str(paths["audio"]),
         captions_data=formatted_captions,
@@ -560,6 +619,7 @@ def _run_generate_pipeline(
         screenshot_captured_count=screenshot_captured_count,
         screenshot_gold_coverage_min=float(research_cfg.get("quality", {}).get("gold_coverage_min", 0.80)),
         screenshot_effective_target_count=screenshot_effective_target_count,
+        custom_script=is_custom_script,
     )
     logger.info(
         "Quality verdict: %s (caption coverage %.3f, script words %d, caption words %d)",

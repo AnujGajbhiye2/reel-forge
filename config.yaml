@@ -48,7 +48,7 @@ assets:
 
 # Caption Settings
 captions:
-  font_size: 80
+  font_size: 70
   font_color: "white"
   stroke_color: "black"
   stroke_width: 3
@@ -56,9 +56,9 @@ captions:
   max_words_per_line: 3
   animation: "word"  # word, line, none
   safe_zone:
-    top_margin_px: 140
-    bottom_margin_px: 320
-    side_margin_px: 90
+    top_margin_px: 160
+    bottom_margin_px: 360
+    side_margin_px: 100
     anchor: "upper_middle"
 
 # Generation Rules
