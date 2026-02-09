@@ -205,6 +205,7 @@ class VideoCompositor:
         clips = []
 
         safe_zone = self.config.get("captions", {}).get("safe_zone", {})
+        caption_cfg = self.config.get("captions", {})
         top_margin = int(safe_zone.get("top_margin_px", 120))
         bottom_margin = int(safe_zone.get("bottom_margin_px", 300))
         side_margin = int(safe_zone.get("side_margin_px", 80))
@@ -212,15 +213,26 @@ class VideoCompositor:
         top_reserved = int(self.config.get("video", {}).get("layout", {}).get("top_reserved_px", 0))
         top_bound = max(top_reserved, top_margin)
         bottom_bound = self.resolution[1] - bottom_margin
+        background_color = caption_cfg.get("bg_color")
+        background_opacity = float(caption_cfg.get("bg_opacity", 0.0))
+        padding_x = int(caption_cfg.get("padding_x", 0))
+        padding_y = int(caption_cfg.get("padding_y", 0))
+        shadow_color = caption_cfg.get("shadow_color")
+        shadow_opacity = float(caption_cfg.get("shadow_opacity", 0.0))
+        shadow_offset_x = int(caption_cfg.get("shadow_offset_x", 0))
+        shadow_offset_y = int(caption_cfg.get("shadow_offset_y", 0))
+        highlight_last_word = bool(caption_cfg.get("highlight_last_word", False))
+        highlight_color = caption_cfg.get("highlight_color", caption_cfg.get("font_color", "white"))
 
         for caption in captions:
+            base_text = caption['text'].upper()
             txt = TextClip(
-                text=caption['text'].upper(),
+                text=base_text,
                 font=font_path,
-                font_size=self.config['captions']['font_size'],
-                color=self.config['captions']['font_color'],
-                stroke_color=self.config['captions']['stroke_color'],
-                stroke_width=self.config['captions']['stroke_width'],
+                font_size=caption_cfg['font_size'],
+                color=caption_cfg['font_color'],
+                stroke_color=caption_cfg['stroke_color'],
+                stroke_width=caption_cfg['stroke_width'],
                 method='caption',
                 size=(self.resolution[0] - (2 * side_margin), None),
                 margin=(24, 16),
@@ -228,7 +240,7 @@ class VideoCompositor:
             )
 
             # Position
-            position = self.config['captions'].get('position', 'center')
+            position = caption_cfg.get('position', 'center')
             if anchor == "upper_middle":
                 usable_height = max(0, bottom_bound - top_bound - txt.h)
                 proposed_y = top_bound + int(usable_height * 0.56)
@@ -246,8 +258,78 @@ class VideoCompositor:
                 y = self._clamp_caption_y(proposed_y, txt.h, top_bound, bottom_bound)
                 pos = ('center', y)
 
-            txt = txt.with_position(pos).with_start(caption['start']).with_duration(caption['end'] - caption['start'])
+            base_start = caption['start']
+            base_duration = caption['end'] - caption['start']
+
+            if background_color and background_opacity > 0:
+                bg_width = txt.w + (2 * padding_x)
+                bg_height = txt.h + (2 * padding_y)
+                bg_x = (self.resolution[0] - bg_width) // 2
+                bg_y = y - padding_y
+                bg_clip = ColorClip(size=(bg_width, bg_height), color=background_color)
+                bg_clip = bg_clip.with_opacity(background_opacity)
+                bg_clip = bg_clip.with_position((bg_x, bg_y)).with_start(base_start).with_duration(base_duration)
+                clips.append(bg_clip)
+
+            if shadow_color and (shadow_offset_x or shadow_offset_y):
+                shadow_clip = TextClip(
+                    text=base_text,
+                    font=font_path,
+                    font_size=caption_cfg['font_size'],
+                    color=shadow_color,
+                    stroke_color=shadow_color,
+                    stroke_width=caption_cfg['stroke_width'],
+                    method='caption',
+                    size=(self.resolution[0] - (2 * side_margin), None),
+                    margin=(24, 16),
+                    text_align='center'
+                )
+                shadow_clip = shadow_clip.with_opacity(shadow_opacity if shadow_opacity > 0 else 1.0)
+                shadow_x = (self.resolution[0] - shadow_clip.w) / 2 + shadow_offset_x
+                shadow_y = y + shadow_offset_y
+                shadow_clip = shadow_clip.with_position((shadow_x, shadow_y)).with_start(base_start).with_duration(base_duration)
+                clips.append(shadow_clip)
+
+            txt = txt.with_position(pos).with_start(base_start).with_duration(base_duration)
             clips.append(txt)
+
+            if highlight_last_word and caption.get("words"):
+                words = [word["word"] for word in caption.get("words", []) if word.get("word")]
+                if words:
+                    last_word = words[-1].upper()
+                    prefix_text = " ".join(w.upper() for w in words[:-1])
+                    if prefix_text:
+                        prefix_text = f"{prefix_text} "
+
+                    prefix_clip = None
+                    prefix_width = 0
+                    if prefix_text:
+                        prefix_clip = TextClip(
+                            text=prefix_text,
+                            font=font_path,
+                            font_size=caption_cfg['font_size'],
+                            color=caption_cfg['font_color'],
+                            stroke_color=caption_cfg['stroke_color'],
+                            stroke_width=caption_cfg['stroke_width'],
+                            method='label'
+                        )
+                        prefix_width = prefix_clip.w
+
+                    last_word_clip = TextClip(
+                        text=last_word,
+                        font=font_path,
+                        font_size=caption_cfg['font_size'],
+                        color=highlight_color,
+                        stroke_color=caption_cfg['stroke_color'],
+                        stroke_width=caption_cfg['stroke_width'],
+                        method='label'
+                    )
+                    total_width = prefix_width + last_word_clip.w
+                    start_x = (self.resolution[0] - total_width) / 2
+                    word_x = start_x + prefix_width
+                    word_y = y + max(0, int((txt.h - last_word_clip.h) / 2))
+                    last_word_clip = last_word_clip.with_position((word_x, word_y)).with_start(base_start).with_duration(base_duration)
+                    clips.append(last_word_clip)
 
         return clips
 
