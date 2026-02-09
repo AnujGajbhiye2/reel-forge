@@ -4,6 +4,9 @@ Media-harvest client for fetching screenshots and images.
 import logging
 from pathlib import Path
 from typing import Any, Dict
+from urllib.parse import urlencode
+import json
+import urllib.request
 
 logger = logging.getLogger(__name__)
 
@@ -27,6 +30,9 @@ class MediaHarvestClient:
         """
         self.config = config
         self.harvest_config_dict = config.get("media_harvest", {}).get("harvest_config", {})
+        self.imagery_cfg = config.get("imagery", {})
+        self.min_quality_score = float(self.imagery_cfg.get("min_quality_score", 0.7))
+        self.last_fetch_report: Dict[str, Dict[str, Any]] = {}
 
         # Verify media-harvest is installed
         try:
@@ -101,6 +107,8 @@ class MediaHarvestClient:
 
         logger.info("Fetching screenshots for: %s", prompt)
 
+        self.last_fetch_report = {}
+
         try:
             # Call media-harvest
             result = self.harvest(prompt, self.harvest_config)
@@ -110,7 +118,7 @@ class MediaHarvestClient:
                 return {}
 
             # Map assets back to marker IDs
-            id_to_path = {}
+            id_to_path: Dict[str, str] = {}
             for marker_id, keyword in keyword_map.items():
                 # Find matching assets (case-insensitive match on entity name)
                 matching_assets = [
@@ -121,11 +129,48 @@ class MediaHarvestClient:
                 if matching_assets:
                     # Pick best asset (highest score)
                     best_asset = max(matching_assets, key=lambda a: a.score if a.score else 0)
-                    id_to_path[marker_id] = str(best_asset.local_path)
-                    logger.info("Mapped %s -> %s (score: %.2f)",
-                               marker_id, keyword, best_asset.score or 0)
+                    score = float(best_asset.score or 0.0)
+                    if score >= self.min_quality_score:
+                        id_to_path[marker_id] = str(best_asset.local_path)
+                        self.last_fetch_report[marker_id] = {
+                            "path": str(best_asset.local_path),
+                            "source": "media_harvest",
+                            "source_url": None,
+                            "score": score,
+                            "keyword": keyword,
+                        }
+                        logger.info("Mapped %s -> %s (score: %.2f)", marker_id, keyword, score)
+                    else:
+                        logger.warning(
+                            "Low-quality asset for %s (%s) with score %.2f < %.2f; trying fallback",
+                            marker_id, keyword, score, self.min_quality_score
+                        )
                 else:
                     logger.warning("No asset found for %s (%s)", marker_id, keyword)
+
+            # Free fallback for unresolved markers via Wikimedia Commons.
+            unresolved = [marker_id for marker_id in keyword_map if marker_id not in id_to_path]
+            for marker_id in unresolved:
+                keyword = keyword_map[marker_id]
+                fallback = self._download_wikimedia_image(keyword=keyword, output_dir=output_dir, marker_id=marker_id)
+                if fallback:
+                    id_to_path[marker_id] = fallback["path"]
+                    self.last_fetch_report[marker_id] = {
+                        "path": fallback["path"],
+                        "source": "wikimedia_commons",
+                        "source_url": fallback["source_url"],
+                        "score": None,
+                        "keyword": keyword,
+                    }
+                    logger.info("Fallback mapped %s -> %s (wikimedia)", marker_id, keyword)
+                else:
+                    self.last_fetch_report[marker_id] = {
+                        "path": None,
+                        "source": "missing",
+                        "source_url": None,
+                        "score": None,
+                        "keyword": keyword,
+                    }
 
             logger.info("Successfully fetched %d/%d screenshots", len(id_to_path), len(keyword_map))
             return id_to_path
@@ -134,3 +179,65 @@ class MediaHarvestClient:
             logger.error("Media-harvest failed: %s", exc)
             # Re-raise to allow orchestrator to handle partial results
             raise
+
+    def _download_wikimedia_image(
+        self,
+        *,
+        keyword: str,
+        output_dir: Path,
+        marker_id: str,
+    ) -> Dict[str, str] | None:
+        """Download first suitable Wikimedia Commons image for keyword."""
+        params = {
+            "action": "query",
+            "format": "json",
+            "generator": "search",
+            "gsrsearch": keyword,
+            "gsrnamespace": 6,
+            "gsrlimit": 8,
+            "prop": "imageinfo",
+            "iiprop": "url|size",
+        }
+        endpoint = "https://commons.wikimedia.org/w/api.php?" + urlencode(params)
+        try:
+            with urllib.request.urlopen(endpoint, timeout=12) as response:
+                payload = json.loads(response.read().decode("utf-8"))
+        except Exception as exc:
+            logger.warning("Wikimedia lookup failed for '%s': %s", keyword, exc)
+            return None
+
+        pages = (payload.get("query") or {}).get("pages") or {}
+        candidates = []
+        for page in pages.values():
+            info_list = page.get("imageinfo") or []
+            if not info_list:
+                continue
+            info = info_list[0]
+            width = int(info.get("width") or 0)
+            height = int(info.get("height") or 0)
+            if width < 640 or height < 640:
+                continue
+            url = info.get("url")
+            if not url:
+                continue
+            candidates.append((width * height, url))
+
+        if not candidates:
+            return None
+
+        candidates.sort(reverse=True)
+        image_url = candidates[0][1]
+        extension = Path(image_url.split("?")[0]).suffix.lower() or ".jpg"
+        if extension not in {".jpg", ".jpeg", ".png", ".webp"}:
+            extension = ".jpg"
+
+        destination_dir = Path(output_dir) / "screenshots"
+        destination_dir.mkdir(parents=True, exist_ok=True)
+        destination = destination_dir / f"{marker_id.lower()}_wikimedia{extension}"
+        try:
+            urllib.request.urlretrieve(image_url, destination)
+        except Exception as exc:
+            logger.warning("Wikimedia download failed for '%s': %s", keyword, exc)
+            return None
+
+        return {"path": str(destination), "source_url": image_url}

@@ -48,7 +48,7 @@ assets:
 
 # Caption Settings
 captions:
-  font_size: 80
+  font_size: 70
   font_color: "white"
   stroke_color: "black"
   stroke_width: 3
@@ -56,9 +56,9 @@ captions:
   max_words_per_line: 3
   animation: "word"  # word, line, none
   safe_zone:
-    top_margin_px: 140
-    bottom_margin_px: 320
-    side_margin_px: 90
+    top_margin_px: 160
+    bottom_margin_px: 360
+    side_margin_px: 100
     anchor: "upper_middle"
 
 # Generation Rules
@@ -75,6 +75,12 @@ logging:
   level_prod: "WARNING"
   console_dev: true
   console_prod: false
+
+# Terminal UX
+ui:
+  summary_mode: "compact"      # compact, verbose
+  progress: true               # Show stage spinner/progress in terminal
+  noise_suppression: true      # Reduce third-party library log noise
 
 # Output
 output:
@@ -143,6 +149,13 @@ media_harvest:
   screenshot_duration_seconds: 4.0
   min_duration_seconds: 2.0
   max_duration_seconds: 6.0
+
+# Free imagery strategy controls
+imagery:
+  strategy: "official_then_commons"
+  min_quality_score: 0.7
+  fallback_sources:
+    - "wikimedia"
 
 # Optional web screenshot research and timed overlay insertion (LEGACY fallback)
 research:

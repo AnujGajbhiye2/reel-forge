@@ -167,6 +167,7 @@ class TestOrchestratorIntegration:
         assert "length" in params
         assert "profanity" in params
         assert "disable_mcp" in params
+        assert "image_map_path" in params
 
     def test_orchestrator_default_values(self):
         """Test orchestrator MCP parameter defaults."""
@@ -179,3 +180,4 @@ class TestOrchestratorIntegration:
         assert sig.parameters["length"].default == "45s"
         assert sig.parameters["profanity"].default == "none"
         assert sig.parameters["disable_mcp"].default is False
+        assert sig.parameters["image_map_path"].default is None
