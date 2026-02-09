@@ -30,6 +30,7 @@ from reelforge.pipeline.orchestrator import _run_generate_pipeline
 @click.option('--profanity', default='none', type=click.Choice(['none', 'light', 'allowed']), help='Profanity level (for MCP mode)')
 @click.option('--disable-mcp', is_flag=True, help='Disable MCP, use legacy script generator')
 @click.option('--custom-script', type=click.Path(exists=True), default=None, help='Path to custom script file (skips LLM generation)')
+@click.option('--image-map', type=click.Path(exists=True), default=None, help='Optional JSON map of marker IDs to local files/URLs')
 def generate(
     topic: str,
     details: str,
@@ -53,6 +54,7 @@ def generate(
     profanity: str,
     disable_mcp: bool,
     custom_script: str | None,
+    image_map: str | None = None,
 ):
     """Generate complete reel from topic to final video."""
     try:
@@ -79,6 +81,7 @@ def generate(
             profanity=profanity,
             disable_mcp=disable_mcp,
             custom_script_path=custom_script,
+            image_map_path=image_map,
         )
 
         click.echo("")
@@ -88,11 +91,32 @@ def generate(
         click.echo(f"  Video:    {result['video_path']}")
         click.echo(f"  Duration: {result['duration']:.1f}s | Size: {result['size_mb']:.1f} MB")
         click.echo(f"  Quality:  {result['quality_verdict']}")
+        click.echo(
+            f"  Audio:    {result['audio_duration_seconds']:.2f}s | "
+            f"Captions: {result['caption_word_count']}/{result['script_word_count']} "
+            f"({result['caption_coverage_ratio']:.2f})"
+        )
+        click.echo(
+            f"  Images:   {result['screenshot_captured_count']}/{result['screenshot_target_count']} "
+            f"({result['screenshot_coverage_ratio']:.2f})"
+        )
+        if result.get("screenshot_top_failure"):
+            click.echo(f"  Image Note: {result['screenshot_top_failure']}")
+        click.echo(
+            f"  Drive:    {result.get('drive_upload_status', 'unknown')}"
+            + (
+                f" ({result['drive_upload_error_short']})"
+                if result.get("drive_upload_error_short")
+                else ""
+            )
+        )
         click.echo("-" * 60)
         click.echo(f"  Script:   {result['script_path']}")
         click.echo(f"  Audio:    {result['audio_path']}")
         click.echo(f"  Captions: {result['captions_path']}")
         click.echo(f"  Metadata: {result['metadata_path']}")
+        if result.get("summary_mode") == "verbose":
+            click.echo(f"  Log:      {result['log_path']}")
         click.echo("=" * 60)
     except Exception as exc:
         click.echo(f"Pipeline failed: {exc}", err=True)

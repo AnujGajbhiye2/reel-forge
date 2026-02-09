@@ -76,6 +76,12 @@ logging:
   console_dev: true
   console_prod: false
 
+# Terminal UX
+ui:
+  summary_mode: "compact"      # compact, verbose
+  progress: true               # Show stage spinner/progress in terminal
+  noise_suppression: true      # Reduce third-party library log noise
+
 # Output
 output:
   directory: "output"
@@ -143,6 +149,13 @@ media_harvest:
   screenshot_duration_seconds: 4.0
   min_duration_seconds: 2.0
   max_duration_seconds: 6.0
+
+# Free imagery strategy controls
+imagery:
+  strategy: "official_then_commons"
+  min_quality_score: 0.7
+  fallback_sources:
+    - "wikimedia"
 
 # Optional web screenshot research and timed overlay insertion (LEGACY fallback)
 research:

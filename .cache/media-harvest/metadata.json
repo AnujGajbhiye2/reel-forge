@@ -1,0 +1,51 @@
+{
+  "resolved_official_url": {
+    "let us c book": "https://www.scribd.com/document/597971883/let-us-c-book",
+    "clean code book": "https://cleancodebook.com",
+    "software design principles book": "https://softwaredesignprinciplesbook.com",
+    "javascript for dummies book": "https://javascriptfordummiesbook.com",
+    "code complete book": "https://codecompletebook.com",
+    "programming terminal": "https://programmingterminal.com",
+    "let us c": "https://studylib.net/doc/27742216/let-us-c--19th-edition-",
+    "clean code": "https://cleancoders.com/library/all",
+    "design principles": "https://www.designprinciplesftw.com/",
+    "javascript for dummies": "https://javascriptfordummies.com",
+    "code complete": "https://www.microsoftpressstore.com/store/code-complete-9780735619678",
+    "terminal": "https://terminal.com",
+    "browser screenshot": "https://browserscreenshot.com",
+    "let": "https://live-let.ocs-software.com/",
+    "us": "https://www.usa.gov/",
+    "clean": "https://www.ccleaner.com/ccleaner/download",
+    "code": "https://code.visualstudio.com/",
+    "design": "https://www.design.com/"
+  },
+  "assets": {
+    "be371a8a9386b643e4e8931be2e12cef09a503c998b172aa285fe9631588522e": {
+      "cached_rel_path": "assets/be371a8a9386b643e4e8931be2e12cef09a503c998b172aa285fe9631588522e.png"
+    },
+    "27105ba6a1cd224d9a53323898955e8738592e9f3a4f58756b9ab316925c4049": {
+      "cached_rel_path": "assets/27105ba6a1cd224d9a53323898955e8738592e9f3a4f58756b9ab316925c4049.jpg"
+    },
+    "a131eec97c81ff48eeab8d2241477be517a6effe23fe6ff96c4e27f04ab45ec0": {
+      "cached_rel_path": "assets/a131eec97c81ff48eeab8d2241477be517a6effe23fe6ff96c4e27f04ab45ec0.png"
+    },
+    "32844a23f8ee5212ea22eecf4a3c716b474fd627371bcccc0cdc2408fdb6a20b": {
+      "cached_rel_path": "assets/32844a23f8ee5212ea22eecf4a3c716b474fd627371bcccc0cdc2408fdb6a20b.jpg"
+    },
+    "2a01f2b399c5e8b2f77d1ac8bce23c5803a0e59f05b38d65edd1917aa0d1ccb0": {
+      "cached_rel_path": "assets/2a01f2b399c5e8b2f77d1ac8bce23c5803a0e59f05b38d65edd1917aa0d1ccb0.png"
+    },
+    "78532b1c974bd90f3e64adbf782ec875b010ab8a2f2cd92ea0490c0ee2209059": {
+      "cached_rel_path": "assets/78532b1c974bd90f3e64adbf782ec875b010ab8a2f2cd92ea0490c0ee2209059.jpg"
+    },
+    "22f679ecfbeff77403c8a6bd09639996972903ae58810e48140727ec97d9e83a": {
+      "cached_rel_path": "assets/22f679ecfbeff77403c8a6bd09639996972903ae58810e48140727ec97d9e83a.webp"
+    },
+    "660dd0bbbaed10e64e0bb21af03c1128a56a1dd7fde47a8ecf3e8ee3979ed1e9": {
+      "cached_rel_path": "assets/660dd0bbbaed10e64e0bb21af03c1128a56a1dd7fde47a8ecf3e8ee3979ed1e9.jpg"
+    },
+    "663af5470a7e9a883edba7cc780b4b9caa1181c37a8696e0297e5a1fdcc35a81": {
+      "cached_rel_path": "assets/663af5470a7e9a883edba7cc780b4b9caa1181c37a8696e0297e5a1fdcc35a81.jpg"
+    }
+  }
+}

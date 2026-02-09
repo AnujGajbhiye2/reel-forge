@@ -4,6 +4,7 @@ Video composition and rendering using MoviePy.
 
 import os
 import random
+from typing import Callable
 from typing import Dict, Any, List, Optional
 from pathlib import Path
 
@@ -376,6 +377,7 @@ class VideoCompositor:
         secondary_character_path: Optional[str] = None,
         speaker_timeline: Optional[List[Dict[str, Any]]] = None,
         screenshots_data: Optional[List[Dict[str, Any]]] = None,
+        progress_callback: Optional[Callable[[int], None]] = None,
     ) -> Path:
         """
         Compose final video from all components.
@@ -455,6 +457,29 @@ class VideoCompositor:
 
             # Render
             self.logger.info("Rendering video to %s", output_path)
+            render_logger = None
+            if progress_callback is not None:
+                from proglog import ProgressBarLogger
+
+                class _PercentLogger(ProgressBarLogger):
+                    def __init__(self, callback: Callable[[int], None]):
+                        super().__init__()
+                        self.callback_fn = callback
+                        self.last_percent = -1
+
+                    def bars_callback(self, bar, attr, value, old_value=None):  # type: ignore[override]
+                        if attr != "index" or bar not in self.bars:
+                            return
+                        total = float(self.bars[bar].get("total") or 0)
+                        if total <= 0:
+                            return
+                        percent = int(max(0.0, min(100.0, (float(value) / total) * 100.0)))
+                        if percent != self.last_percent:
+                            self.last_percent = percent
+                            self.callback_fn(percent)
+
+                render_logger = _PercentLogger(progress_callback)
+
             final.write_videofile(
                 output_path,
                 fps=self.fps,
@@ -462,7 +487,7 @@ class VideoCompositor:
                 audio_codec=self.config['output']['audio_codec'],
                 preset='medium',
                 threads=4,
-                logger=None,
+                logger=render_logger,
             )
 
             # Cleanup

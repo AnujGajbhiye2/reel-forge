@@ -93,6 +93,7 @@ class MarkerResolver:
 
             screenshots_data.append({
                 "id": len(screenshots_data) + 1,
+                "marker_id": marker_pos.marker_id,
                 "file": id_to_path[marker_pos.marker_id],
                 "start": start,
                 "end": end,
