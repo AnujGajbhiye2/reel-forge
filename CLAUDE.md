@@ -79,3 +79,30 @@ Word count targets: dialogue 100-130 words, solo 110-140 words. Custom scripts h
 - Custom scripts get 3s duration tolerance and soft word-count failures (won't trash the video)
 - Console logging is at WARNING level; details go to log files in `logs/`
 - MoviePy video rendering is silent (logger=None)
+
+### MCP Integration (Simplified, 2026-02-09)
+
+**Problem Solved**: Original MCP subprocess calls failed with "Invalid request parameters" (-32602) due to async stdio protocol mismatch.
+
+**Current Implementation**:
+- `MCPScriptGenerator` (`reelforge/script/mcp_generator.py`) uses direct Gemini SDK with MCP prompt template
+- No subprocess complexity - simpler, more reliable, easier to debug
+- Key methods: `generate()`, `parse_dialogue()`, `expand_short_script()`
+- Output format: Dialogue lines with `[SHOW:S#]` markers + single keyword line at end
+- Keyword format: `S1=subject1, S2=subject2` (comma-separated ID=subject pairs)
+- `parse_dialogue()` handles A:, [A], (A) formats and strips REEL TITLE lines
+- `expand_short_script()` regenerates with stricter constraints (doesn't expand existing text)
+
+### Quality Gate Optimization (Early Checks, 2026-02-09)
+
+**Problem Solved**: Quality checks ran AFTER 9+ minute video rendering, wasting time on videos that would fail validation.
+
+**Current Implementation**:
+- **Dialogue alternation** - checked in retry loop right after parsing (~line 221 in orchestrator.py)
+  - Fails fast during generation attempts, provides specific feedback to LLM
+- **Script word count** - checked in pre-render quality gate (after caption generation, ~line 330)
+  - Catches too-long scripts before expensive rendering
+- **Caption coverage** - checked in pre-render quality gate (after caption generation)
+  - Critical: coverage < 0.75 fails immediately, prevents render when WhisperX transcription fails
+- Final quality gate still runs for metadata/reporting purposes
+- Result: Quality failures caught in seconds, not after 9+ minutes
