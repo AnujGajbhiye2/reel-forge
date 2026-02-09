@@ -314,14 +314,46 @@ class VideoCompositor:
             if highlight_last_word and caption.get("words"):
                 words = [word["word"] for word in caption.get("words", []) if word.get("word")]
                 if words:
-                    last_word = words[-1].upper()
-                    prefix_text = " ".join(w.upper() for w in words[:-1])
-                    if prefix_text:
-                        prefix_text = f"{prefix_text} "
+                    words_upper = [word.upper() for word in words]
+                    last_word = words_upper[-1]
+                    space_width = TextClip(
+                        text=" ",
+                        font=font_path,
+                        font_size=caption_cfg['font_size'],
+                        color=caption_cfg['font_color'],
+                        stroke_color=caption_cfg['stroke_color'],
+                        stroke_width=caption_cfg['stroke_width'],
+                        method='label'
+                    ).w
 
-                    prefix_clip = None
-                    prefix_width = 0
-                    if prefix_text:
+                    max_width = self.resolution[0] - (2 * side_margin)
+                    lines: List[List[str]] = [[]]
+                    line_widths: List[float] = [0.0]
+                    for word in words_upper:
+                        word_clip = TextClip(
+                            text=word,
+                            font=font_path,
+                            font_size=caption_cfg['font_size'],
+                            color=caption_cfg['font_color'],
+                            stroke_color=caption_cfg['stroke_color'],
+                            stroke_width=caption_cfg['stroke_width'],
+                            method='label'
+                        )
+                        word_width = word_clip.w
+                        current_width = line_widths[-1]
+                        add_space = space_width if lines[-1] else 0.0
+                        if current_width + add_space + word_width > max_width and lines[-1]:
+                            lines.append([word])
+                            line_widths.append(word_width)
+                        else:
+                            lines[-1].append(word)
+                            line_widths[-1] = current_width + add_space + word_width
+
+                    last_line_words = lines[-1]
+                    prefix_words = last_line_words[:-1]
+                    prefix_width = 0.0
+                    if prefix_words:
+                        prefix_text = " ".join(prefix_words) + " "
                         prefix_clip = TextClip(
                             text=prefix_text,
                             font=font_path,
@@ -332,6 +364,7 @@ class VideoCompositor:
                             method='label'
                         )
                         prefix_width = prefix_clip.w
+                    last_line_width = line_widths[-1]
 
                     last_word_clip = TextClip(
                         text=last_word,
@@ -342,10 +375,19 @@ class VideoCompositor:
                         stroke_width=caption_cfg['stroke_width'],
                         method='label'
                     )
-                    total_width = prefix_width + last_word_clip.w
-                    start_x = (self.resolution[0] - total_width) / 2
+                    start_x = (self.resolution[0] - last_line_width) / 2
                     word_x = start_x + prefix_width
-                    word_y = y + max(0, int((txt.h - last_word_clip.h) / 2))
+                    line_height = TextClip(
+                        text="Ay",
+                        font=font_path,
+                        font_size=caption_cfg['font_size'],
+                        color=caption_cfg['font_color'],
+                        stroke_color=caption_cfg['stroke_color'],
+                        stroke_width=caption_cfg['stroke_width'],
+                        method='label'
+                    ).h
+                    last_line_index = max(0, len(lines) - 1)
+                    word_y = y + int(last_line_index * line_height)
                     last_word_clip = last_word_clip.with_position((word_x, word_y)).with_start(base_start).with_duration(base_duration)
                     clips.append(last_word_clip)
 
