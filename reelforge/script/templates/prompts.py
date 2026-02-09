@@ -20,6 +20,8 @@ Requirements:
 - FAST-PACED, punchy delivery
 - Use simple, conversational language
 - Include ONE surprising fact or counterintuitive insight
+- Use a curiosity gap + quick payoff structure (hook → 2-3 rapid beats → takeaway)
+- Emphasize 2-3 power words (short, memorable, hype)
 - End with a strong call-to-action (under 10 words)
 - NO stage directions, NO scene descriptions, NO bullet points
 - Format: Just the spoken words, separated by newlines for natural pauses
@@ -51,6 +53,8 @@ Requirements:
 - FAST-PACED, punchy dialogue
 - Use simple, conversational language
 - Include ONE surprising fact
+- Use a curiosity gap + quick payoff structure (hook → 2-3 rapid beats → takeaway)
+- Emphasize 2-3 power words (short, memorable, hype)
 - End with a strong punchline (under 15 words)
 
 CRITICAL FORMATTING:
