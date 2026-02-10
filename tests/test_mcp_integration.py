@@ -314,6 +314,40 @@ class TestMarkerResolver:
         assert screenshots_data[0]["start"] < screenshots_data[0]["end"]
         assert screenshots_data[0]["end"] <= screenshots_data[1]["start"]
 
+    def test_resolve_timing_conflicts_handles_tight_spacing_without_overlap(self):
+        """Regression: end time should never exceed the next marker start."""
+        from reelforge.media.marker_resolver import MarkerResolver
+
+        resolver = MarkerResolver({"screenshots": {"min_duration_seconds": 0.5, "max_duration_seconds": 6.0}})
+
+        resolved = resolver._resolve_timing_conflicts(
+            [
+                {"marker_id": "S1", "start": 1.08, "end": 5.08},
+                {"marker_id": "S2", "start": 1.17, "end": 5.17},
+            ],
+            audio_end=10.0,
+        )
+
+        assert resolved[0]["end"] <= resolved[1]["start"]
+
+    def test_resolve_timing_conflicts_handles_same_word_markers(self):
+        """Markers sharing the same timestamp should be shifted to avoid overlap."""
+        from reelforge.media.marker_resolver import MarkerResolver
+
+        resolver = MarkerResolver({"screenshots": {"min_duration_seconds": 0.5, "max_duration_seconds": 6.0}})
+
+        resolved = resolver._resolve_timing_conflicts(
+            [
+                {"marker_id": "S1", "start": 1.5, "end": 5.5},
+                {"marker_id": "S2", "start": 1.5, "end": 5.5},
+                {"marker_id": "S3", "start": 1.5, "end": 5.5},
+            ],
+            audio_end=10.0,
+        )
+
+        assert resolved[0]["end"] <= resolved[1]["start"]
+        assert resolved[1]["end"] <= resolved[2]["start"]
+
 
 class TestReelTitleFiltering:
     """Tests for REEL TITLE line filtering."""

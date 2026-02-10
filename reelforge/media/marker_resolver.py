@@ -115,22 +115,31 @@ class MarkerResolver:
             return screenshots_data
 
         ordered = sorted(screenshots_data, key=lambda shot: float(shot.get("start", 0.0)))
+        epsilon = 0.001
+        prev_end = -epsilon
 
         for idx, shot in enumerate(ordered):
-            start = max(0.0, float(shot.get("start", 0.0)))
+            original_start = max(0.0, float(shot.get("start", 0.0)))
+            if original_start < prev_end:
+                start = prev_end + epsilon
+            else:
+                start = original_start
+
             end = min(float(audio_end), float(shot.get("end", start + self.min_duration)))
+            end = min(end, start + self.max_duration)
             if end - start < self.min_duration:
                 end = min(float(audio_end), start + self.min_duration)
 
             if idx + 1 < len(ordered):
                 next_start = float(ordered[idx + 1].get("start", end))
                 if end > next_start:
-                    end = max(start + 0.1, next_start - 0.05)
-                    if end - start < 0.1:
-                        end = start + 0.1
+                    end = max(start, next_start)
+
+            end = max(start, min(float(audio_end), end))
+            prev_end = end
 
             shot["start"] = round(start, 3)
-            shot["end"] = round(min(float(audio_end), end), 3)
+            shot["end"] = round(end, 3)
 
         return ordered
 
