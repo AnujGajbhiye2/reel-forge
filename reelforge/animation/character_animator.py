@@ -121,9 +121,14 @@ class CharacterAnimator:
         Returns:
             Animated clip with reactive position
         """
+        def _set_position(clip: Any, value: Any) -> Any:
+            if hasattr(clip, "with_position"):
+                return clip.with_position(value)
+            return clip.set_position(value)
+
         if self.animation_type == "none":
             # No animation, return static position
-            return character_clip.set_position((base_x, base_y))
+            return _set_position(character_clip, (base_x, base_y))
 
         try:
             # Load audio amplitude data
@@ -138,8 +143,8 @@ class CharacterAnimator:
                 return (base_x, base_y - bounce)
 
             # Apply position function to clip
-            return character_clip.set_position(position_func)
+            return _set_position(character_clip, position_func)
 
         except Exception as e:
             logger.warning(f"Animation failed, using static position: {e}")
-            return character_clip.set_position((base_x, base_y))
+            return _set_position(character_clip, (base_x, base_y))

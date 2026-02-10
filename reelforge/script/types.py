@@ -1,8 +1,9 @@
 """
 Data structures for MCP script generation with screenshot markers.
 """
+import re
 from dataclasses import dataclass
-from typing import Dict, List, Optional
+from typing import Dict, List
 
 
 @dataclass
@@ -20,6 +21,51 @@ class ScriptWithMarkers:
     dialogue_text: str                      # Full script with [SHOW:S#] markers
     keyword_map: Dict[str, str]             # {S1: "cursor", S2: "codex"}
     marker_positions: List[MarkerPosition]  # Parsed marker locations
+
+
+_DIALOGUE_LINE_RE = re.compile(r"^([A-Za-z][A-Za-z0-9_\- ]*):\s+(.+)$")
+_KEYWORD_LINE_RE = re.compile(r"\bS\d+\s*=")
+_HEADING_LINE_RE = re.compile(
+    r"^(?:\d+\s*[\.\)]\s*)?(?:DIALOGUE SCRIPT|MEDIA HARVESTER KEYWORDS|OUTPUT FORMAT)\b",
+    flags=re.IGNORECASE,
+)
+
+
+def sanitize_dialogue_script(raw_text: str) -> str:
+    """
+    Keep only valid dialogue lines and remove wrapper/template noise.
+
+    Args:
+        raw_text: Raw model output containing dialogue and optional wrapper text
+
+    Returns:
+        Newline-separated dialogue lines (speaker-prefixed)
+    """
+    if not raw_text:
+        return ""
+
+    cleaned_lines: List[str] = []
+    for raw_line in raw_text.splitlines():
+        line = raw_line.strip()
+        if not line:
+            continue
+        if line.startswith("```"):
+            continue
+        if line.upper().startswith("REEL TITLE:"):
+            continue
+        if _HEADING_LINE_RE.match(line):
+            continue
+        if _KEYWORD_LINE_RE.search(line):
+            continue
+
+        match = _DIALOGUE_LINE_RE.match(line)
+        if not match:
+            continue
+
+        speaker, body = match.groups()
+        cleaned_lines.append(f"{speaker.strip()}: {body.strip()}")
+
+    return "\n".join(cleaned_lines)
 
 
 def parse_mcp_output(raw_text: str) -> ScriptWithMarkers:
@@ -40,37 +86,14 @@ def parse_mcp_output(raw_text: str) -> ScriptWithMarkers:
     Returns:
         ScriptWithMarkers with parsed dialogue, keyword map, and marker positions
     """
-    lines = raw_text.strip().split('\n')
+    lines = raw_text.strip().split("\n")
+    keyword_map: Dict[str, str] = {}
 
-    # Find the keyword definition line (contains "S1=")
-    keyword_line_idx = None
-    for idx, line in enumerate(lines):
-        if '=' in line and any(f'S{i}=' in line for i in range(1, 10)):
-            keyword_line_idx = idx
-            break
+    for line in lines:
+        if _KEYWORD_LINE_RE.search(line):
+            keyword_map.update(extract_keyword_map(line))
 
-    if keyword_line_idx is None:
-        # No keywords found, return plain dialogue
-        dialogue_text = raw_text.strip()
-        return ScriptWithMarkers(
-            dialogue_text=dialogue_text,
-            keyword_map={},
-            marker_positions=[]
-        )
-
-    # Split into dialogue and keyword sections
-    dialogue_lines = lines[:keyword_line_idx]
-    keyword_line = lines[keyword_line_idx]
-
-    # Clean up dialogue (remove empty lines and REEL TITLE lines)
-    dialogue_lines = [
-        line for line in dialogue_lines
-        if line.strip() and not line.strip().startswith('REEL TITLE:')
-    ]
-    dialogue_text = '\n'.join(dialogue_lines)
-
-    # Extract keyword map
-    keyword_map = extract_keyword_map(keyword_line)
+    dialogue_text = sanitize_dialogue_script(raw_text)
 
     # Find marker positions
     marker_positions = find_marker_positions(dialogue_text)
@@ -96,17 +119,9 @@ def extract_keyword_map(keyword_line: str) -> Dict[str, str]:
     """
     keyword_map = {}
 
-    # Split by comma and parse each definition
-    parts = keyword_line.split(',')
-    for part in parts:
-        part = part.strip()
-        if '=' not in part:
-            continue
-
-        marker_id, keyword = part.split('=', 1)
-        marker_id = marker_id.strip()
-        keyword = keyword.strip()
-
+    for match in re.finditer(r"(S\d+)\s*=\s*([^,]+)", keyword_line, flags=re.IGNORECASE):
+        marker_id = match.group(1).upper().strip()
+        keyword = match.group(2).strip()
         if marker_id and keyword:
             keyword_map[marker_id] = keyword
 

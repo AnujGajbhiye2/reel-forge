@@ -41,8 +41,9 @@ def load_config(config_path: str = "config.yaml") -> Dict[str, Any]:
         config = yaml.safe_load(f)
 
     # Override with environment variables if present
-    if os.getenv('GEMINI_API_KEY'):
-        config['gemini_api_key'] = os.getenv('GEMINI_API_KEY')
+    openai_api_key = os.getenv('OPENAI_API_KEY') or os.getenv('GEMINI_API_KEY')
+    if openai_api_key:
+        config['openai_api_key'] = openai_api_key
 
     drive_cfg = config.setdefault("integrations", {}).setdefault("google_drive", {})
     oauth_cfg = drive_cfg.setdefault("oauth", {})

@@ -3,18 +3,18 @@
 # App Runtime
 app:
   mode: "dev"  # dev or prod
+openai_api_key: "YOUR_OPENAI_API_KEY_HERE"
 
-# Script Generation (Native Google Gemini SDK)
+# Script Generation (OpenAI SDK)
 script:
-  provider: "gemini"
+  provider: "openai"
   use_mcp: true  # Enable MCP integration (default ON)
   mcp_server_path: "/home/anuj/.claude/mcp-servers/reelforge-writer/server.py"
   mcp_python_path: "/home/anuj/.claude/mcp-servers/reelforge-writer/venv/bin/python"
   mcp_timeout_seconds: 30
-  model: "gemini-2.5-pro"
+  model: "gpt-4o-mini"
   fallback_models:
-    - "gemini-2.5-flash"
-    - "gemini-2.0-flash"
+    - "gpt-4o"
   temperature: 0.7
   max_tokens: 1000
 

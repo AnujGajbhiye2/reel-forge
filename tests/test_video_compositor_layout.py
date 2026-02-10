@@ -146,3 +146,27 @@ def test_create_screenshot_clips_creates_card_layers(monkeypatch, tmp_path):
     assert len(clips) == 3
     assert all(c.start == 1.0 for c in clips)
     assert all(c.duration == 3.0 for c in clips)
+
+
+def test_set_position_compat_prefers_with_position():
+    compositor = VideoCompositor(_make_config())
+    clip = _FakeClip()
+    out = compositor._set_position(clip, ("center", 100))
+    assert out is clip
+    assert clip.position == ("center", 100)
+
+
+def test_set_position_compat_falls_back_to_legacy():
+    class _LegacyClip:
+        def __init__(self):
+            self.position = None
+
+        def set_position(self, value):
+            self.position = value
+            return self
+
+    compositor = VideoCompositor(_make_config())
+    clip = _LegacyClip()
+    out = compositor._set_position(clip, ("center", 120))
+    assert out is clip
+    assert clip.position == ("center", 120)

@@ -13,7 +13,7 @@ logger = logging.getLogger(__name__)
 
 class MCPScriptGenerator:
     """
-    Script generator using MCP prompt with direct Gemini SDK.
+    Script generator using MCP prompt with OpenAI SDK.
 
     Generates dialogue scripts with embedded [SHOW:S#] markers for screenshot placement.
     """
@@ -28,13 +28,13 @@ class MCPScriptGenerator:
         self.config = config
         self.script_config = config.get("script", {})
 
-        # Gemini configuration
-        self.gemini_model = self.script_config.get("model", "gemini-2.5-pro")
+        # Model configuration
+        self.openai_model = self.script_config.get("model", "gpt-4o-mini")
         self.temperature = self.script_config.get("temperature", 0.7)
         self.max_tokens = self.script_config.get("max_tokens", 1000)
 
         # Compatibility with orchestrator interface
-        self.model = self.gemini_model
+        self.model = self.openai_model
         self.models = [self.model] + self.script_config.get("fallback_models", [])
 
     def generate(
@@ -63,13 +63,13 @@ class MCPScriptGenerator:
             ScriptWithMarkers with dialogue, keyword map, and marker positions
 
         Raises:
-            RuntimeError: If Gemini API fails
+            RuntimeError: If OpenAI API fails
         """
         if style != "dialogue":
             logger.warning("MCP generator only supports dialogue style, got: %s", style)
             # Continue with dialogue mode anyway
 
-        logger.info("Generating script via direct Gemini with MCP prompt")
+        logger.info("Generating script via direct OpenAI with MCP prompt")
         return self._generate(topic, details, websites, length, profanity, model)
 
     def _generate(
@@ -82,7 +82,7 @@ class MCPScriptGenerator:
         model: Optional[str] = None,
     ) -> ScriptWithMarkers:
         """
-        Use direct Gemini SDK with embedded MCP prompt.
+        Use OpenAI SDK with embedded MCP prompt.
 
         Args:
             topic: Main topic
@@ -96,21 +96,20 @@ class MCPScriptGenerator:
             Parsed ScriptWithMarkers
 
         Raises:
-            RuntimeError: If Gemini API fails
+            RuntimeError: If OpenAI API fails
         """
         try:
-            from google import genai
-            from google.genai import types
+            from openai import OpenAI
         except ImportError as exc:
             raise RuntimeError(
-                "google-genai not installed. Install: pip install google-genai"
+                "openai not installed. Install: pip install openai"
             ) from exc
 
         # Get API key
-        api_key = self.config.get("gemini_api_key")
+        api_key = self.config.get("openai_api_key") or self.config.get("gemini_api_key")
         if not api_key:
             raise RuntimeError(
-                "Gemini API key not found. Set in config.yaml or GEMINI_API_KEY env var"
+                "OpenAI API key not found. Set in config.yaml or OPENAI_API_KEY env var"
             )
 
         # Build prompt with hook library
@@ -145,35 +144,42 @@ class MCPScriptGenerator:
         if details:
             prompt_text += f"\n\nAdditional context:\n{details}"
 
-        # Call Gemini (use provided model or default)
-        model_to_use = model or self.gemini_model
-        logger.debug("Calling Gemini API with model: %s", model_to_use)
+        # Call OpenAI (use provided model or default)
+        model_to_use = model or self.openai_model
+        logger.debug("Calling OpenAI API with model: %s", model_to_use)
 
-        client = genai.Client(api_key=api_key)
+        client = OpenAI(api_key=api_key)
 
-        response = client.models.generate_content(
+        response = client.chat.completions.create(
             model=model_to_use,
-            contents=prompt_text,
-            config=types.GenerateContentConfig(
-                temperature=self.temperature,
-                max_output_tokens=self.max_tokens,
-            ),
+            messages=[
+                {"role": "system", "content": "You write viral short-form dialogue scripts with strict formatting."},
+                {"role": "user", "content": prompt_text},
+            ],
+            temperature=self.temperature,
+            max_tokens=self.max_tokens,
         )
 
-        if not response or not response.text:
+        choices = getattr(response, "choices", None) or []
+        content = ""
+        if choices:
+            message = getattr(choices[0], "message", None)
+            content = (getattr(message, "content", None) or "").strip()
+
+        if not response or not content:
             raise RuntimeError(
-                "Gemini returned empty response. This may be due to:\n"
+                "OpenAI returned empty response. This may be due to:\n"
                 "1. API rate limiting\n"
                 "2. Prompt safety filters\n"
                 "3. Network issues\n"
                 "Try again or check your API quota."
             )
 
-        script_text = response.text.strip()
+        script_text = content
 
         if len(script_text) < 50:
             raise RuntimeError(
-                f"Gemini returned very short response ({len(script_text)} chars): {script_text[:100]}\n"
+                f"OpenAI returned very short response ({len(script_text)} chars): {script_text[:100]}\n"
                 "This usually indicates a prompt/API issue."
             )
 
@@ -184,7 +190,7 @@ class MCPScriptGenerator:
 
         # Parse output
         script_with_markers = parse_mcp_output(script_text)
-        logger.info("Gemini generated script with %d markers", len(script_with_markers.keyword_map))
+        logger.info("OpenAI generated script with %d markers", len(script_with_markers.keyword_map))
 
         return script_with_markers
 

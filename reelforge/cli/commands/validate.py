@@ -17,10 +17,11 @@ def validate(config: str):
         cfg = load_config(config)
         click.echo(f"Configuration loaded from: {config}")
 
-        if cfg.get('gemini_api_key') == 'YOUR_GEMINI_API_KEY_HERE':
-            click.echo("Warning: Gemini API key not configured")
+        key = cfg.get('openai_api_key') or cfg.get('gemini_api_key')
+        if key in {None, 'YOUR_OPENAI_API_KEY_HERE', 'YOUR_GEMINI_API_KEY_HERE'}:
+            click.echo("Warning: OpenAI API key not configured")
         else:
-            click.echo("Gemini API key configured")
+            click.echo("OpenAI API key configured")
 
         backgrounds = cfg['assets']['backgrounds']
         click.echo(f"\nBackground videos: {len(backgrounds)}")

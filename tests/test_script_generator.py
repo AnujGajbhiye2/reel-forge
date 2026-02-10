@@ -12,7 +12,7 @@ class TestScriptGenerator:
     def test_init_without_api_key(self):
         """Test that ScriptGenerator raises error without API key."""
         config = {
-            'gemini_api_key': 'YOUR_GEMINI_API_KEY_HERE',
+            'openai_api_key': 'YOUR_OPENAI_API_KEY_HERE',
             'script': {
                 'base_url': 'https://generativelanguage.googleapis.com/v1beta/openai/',
                 'model': 'gemini-2.0-flash',
@@ -21,13 +21,13 @@ class TestScriptGenerator:
             }
         }
 
-        with pytest.raises(ValueError, match="Gemini API key not configured"):
+        with pytest.raises(ValueError, match="OpenAI API key not configured"):
             ScriptGenerator(config)
 
     def test_init_with_api_key(self):
         """Test that ScriptGenerator initializes with valid API key."""
         config = {
-            'gemini_api_key': 'test-api-key-123',
+            'openai_api_key': 'test-api-key-123',
             'script': {
                 'base_url': 'https://generativelanguage.googleapis.com/v1beta/openai/',
                 'model': 'gemini-2.0-flash',
@@ -45,7 +45,7 @@ class TestScriptGenerator:
     def test_init_with_fallback_models(self):
         """Test that ScriptGenerator loads model fallback chain."""
         config = {
-            'gemini_api_key': 'test-api-key-123',
+            'openai_api_key': 'test-api-key-123',
             'script': {
                 'base_url': 'https://generativelanguage.googleapis.com/v1beta/openai/',
                 'model': 'gemini-2.5-pro',
@@ -62,7 +62,7 @@ class TestScriptGenerator:
     def test_parse_dialogue_with_brackets(self):
         """Test parsing dialogue with [CHARACTER] format."""
         config = {
-            'gemini_api_key': 'test-key',
+            'openai_api_key': 'test-key',
             'script': {
                 'base_url': 'https://test.com',
                 'model': 'test',
@@ -92,7 +92,7 @@ class TestScriptGenerator:
     def test_parse_dialogue_with_colons_only(self):
         """Test parsing dialogue with CHARACTER: format."""
         config = {
-            'gemini_api_key': 'test-key',
+            'openai_api_key': 'test-key',
             'script': {
                 'base_url': 'https://test.com',
                 'model': 'test',
@@ -119,7 +119,7 @@ PETER: That's insane!
     def test_parse_dialogue_with_mixed_case_names(self):
         """Test parsing dialogue with title-cased names."""
         config = {
-            'gemini_api_key': 'test-key',
+            'openai_api_key': 'test-key',
             'script': {
                 'base_url': 'https://test.com',
                 'model': 'test',
@@ -145,7 +145,7 @@ DeeDee: Yes, that boosts reliability when output is too short.
     def test_format_dialogue(self):
         """Test formatting dialogue dict back to text."""
         config = {
-            'gemini_api_key': 'test-key',
+            'openai_api_key': 'test-key',
             'script': {
                 'base_url': 'https://test.com',
                 'model': 'test',
@@ -171,7 +171,7 @@ DeeDee: Yes, that boosts reliability when output is too short.
     def test_extract_text_content_handles_none(self):
         """Test safe extraction when provider returns None content."""
         config = {
-            'gemini_api_key': 'test-key',
+            'openai_api_key': 'test-key',
             'script': {
                 'base_url': 'https://test.com',
                 'model': 'test',
@@ -207,8 +207,8 @@ class TestScriptGeneratorIntegration:
             config = load_config('config.yaml')
 
             # Skip if API key not configured
-            if config.get('gemini_api_key') == 'YOUR_GEMINI_API_KEY_HERE':
-                pytest.skip("Gemini API key not configured")
+            if config.get('openai_api_key') == 'YOUR_OPENAI_API_KEY_HERE':
+                pytest.skip("OpenAI API key not configured")
 
             generator = ScriptGenerator(config)
             try:
@@ -233,8 +233,8 @@ class TestScriptGeneratorIntegration:
             config = load_config('config.yaml')
 
             # Skip if API key not configured
-            if config.get('gemini_api_key') == 'YOUR_GEMINI_API_KEY_HERE':
-                pytest.skip("Gemini API key not configured")
+            if config.get('openai_api_key') == 'YOUR_OPENAI_API_KEY_HERE':
+                pytest.skip("OpenAI API key not configured")
 
             generator = ScriptGenerator(config)
             try:

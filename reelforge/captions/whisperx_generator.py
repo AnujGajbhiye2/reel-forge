@@ -6,6 +6,7 @@ import os
 import json
 import torch
 import warnings
+from importlib import metadata
 
 # Suppress deprecation warnings from dependencies
 warnings.filterwarnings('ignore', category=UserWarning)
@@ -59,6 +60,36 @@ class CaptionGenerator:
         # Device selection
         self.device = device or ("cuda" if torch.cuda.is_available() else "cpu")
         self.compute_type = "float16" if self.device == "cuda" else "int8"
+        self._validate_runtime_stack()
+
+    @staticmethod
+    def _validate_runtime_stack() -> None:
+        """
+        Warn when runtime stack drifts from pinned/tested versions.
+        """
+        pinned_versions = {
+            "torch": "2.8.0",
+            "torchaudio": "2.8.0",
+            "pyannote.audio": "3.4.0",
+        }
+        mismatches = []
+
+        for package_name, expected in pinned_versions.items():
+            try:
+                installed = metadata.version(package_name)
+            except metadata.PackageNotFoundError:
+                mismatches.append(f"{package_name}=<missing> (expected {expected})")
+                continue
+
+            if installed != expected:
+                mismatches.append(f"{package_name}={installed} (expected {expected})")
+
+        if mismatches:
+            warnings.warn(
+                "Caption runtime stack differs from tested pins: "
+                + ", ".join(mismatches),
+                RuntimeWarning,
+            )
 
     def generate_captions(self, audio_path: str) -> List[Dict[str, Any]]:
         """

@@ -8,6 +8,7 @@ from reelforge.script.types import (
     extract_keyword_map,
     find_marker_positions,
     parse_mcp_output,
+    sanitize_dialogue_script,
 )
 
 
@@ -133,6 +134,38 @@ S1=cursor, S2=codex"""
         assert "A: Check out Cursor [SHOW:S1]" in result.dialogue_text
         assert "B: And Codex [SHOW:S2]" in result.dialogue_text
         assert result.keyword_map == {"S1": "cursor", "S2": "codex"}
+
+    def test_mcp_output_strips_wrapper_lines_without_keywords(self):
+        raw_text = """1. DIALOGUE SCRIPT
+A: Hello world
+B: This is cool
+MEDIA HARVESTER KEYWORDS"""
+        result = parse_mcp_output(raw_text)
+        assert result.dialogue_text == "A: Hello world\nB: This is cool"
+        assert result.keyword_map == {}
+
+    def test_mcp_output_parses_keyword_line_with_label_prefix(self):
+        raw_text = """A: First line [SHOW:S1]
+B: Second line [SHOW:S2]
+MEDIA HARVESTER KEYWORDS: S1=cursor, S2=codex"""
+        result = parse_mcp_output(raw_text)
+        assert result.keyword_map == {"S1": "cursor", "S2": "codex"}
+        assert len(result.marker_positions) == 2
+
+
+class TestDialogueSanitization:
+    def test_sanitize_dialogue_script_keeps_only_speaker_lines(self):
+        raw_text = """```text
+REEL TITLE: Test
+1. DIALOGUE SCRIPT
+A: Line one
+Some random prose
+B: Line two [SHOW:S1]
+2. MEDIA HARVESTER KEYWORDS
+S1=cursor
+```"""
+        cleaned = sanitize_dialogue_script(raw_text)
+        assert cleaned == "A: Line one\nB: Line two [SHOW:S1]"
 
 
 class TestMarkerResolver:

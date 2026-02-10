@@ -88,6 +88,30 @@ def _load_manual_image_map(
     logger.info("Loaded %d manual image-map overrides", len(resolved))
     return resolved
 
+
+def _write_failure_snapshot(
+    *,
+    run_dir: Path,
+    stage: str,
+    reason: str,
+    extra: Optional[Dict[str, Any]] = None,
+) -> None:
+    """Persist structured failure details for post-mortem debugging."""
+    payload: Dict[str, Any] = {
+        "stage": stage,
+        "reason": reason,
+    }
+    if extra:
+        payload.update(extra)
+
+    try:
+        snapshot_path = run_dir / "failure_snapshot.json"
+        with open(snapshot_path, "w", encoding="utf-8") as handle:
+            json.dump(payload, handle, indent=2)
+    except Exception:
+        # Snapshot logging must never mask the original failure.
+        return
+
 from reelforge.pipeline.drive_upload import _drive_upload_defaults, _upload_artifacts_to_drive
 from reelforge.pipeline.outputs import _audio_duration, _build_output_paths, _resolve_duration_bounds, _resolve_mode
 from reelforge.pipeline.quality_gate import _assess_output_quality
@@ -202,12 +226,27 @@ def _run_generate_pipeline(
     max_word_target = 140 if style == "solo" else 130
     model_candidates = list(getattr(generator, "models", [generator.model]))
     model_index = 0
+    script_sanitization_applied = False
+    script_sanitization_changes = 0
 
     constraints = (
         f"Keep pace punchy and complete. Target spoken duration between {lower_bound} and {upper_bound} seconds. "
         f"Do not underwrite. End cleanly with a strong closing line."
     )
     enhanced_details = f"{details} {constraints}".strip()
+
+    def _sanitize_dialogue_if_needed(text: str) -> str:
+        nonlocal script_sanitization_applied, script_sanitization_changes
+        if style != "dialogue":
+            return text
+        from reelforge.script.types import sanitize_dialogue_script
+
+        cleaned = sanitize_dialogue_script(text)
+        if cleaned != text:
+            script_sanitization_applied = True
+            script_sanitization_changes += 1
+            logger.info("Sanitized dialogue script output (removed non-dialogue wrapper lines)")
+        return cleaned
 
     # Handle custom script (skip LLM generation)
     is_custom_script = bool(custom_script_path)
@@ -227,8 +266,11 @@ def _run_generate_pipeline(
         else:
             script_text = raw_script.strip()
 
-        # Strip REEL TITLE lines
-        script_text = re.sub(r'^REEL TITLE:.*\n?', '', script_text, flags=re.MULTILINE).strip()
+        if style == "dialogue":
+            script_text = _sanitize_dialogue_if_needed(script_text)
+        else:
+            # Strip REEL TITLE lines for solo/custom non-MCP scripts.
+            script_text = re.sub(r'^REEL TITLE:.*\n?', '', script_text, flags=re.MULTILINE).strip()
 
         from reelforge.pipeline.quality_gate import _word_count
         word_count = _word_count(script_text)
@@ -238,33 +280,69 @@ def _run_generate_pipeline(
         hard_min = max(1, min_word_target - 30)  # absolute floor (e.g. 70 for dialogue)
         hard_max = max_word_target + 40           # absolute ceiling (e.g. 170 for dialogue)
         if word_count < hard_min:
-            raise RuntimeError(
+            reason = (
                 f"Script too short: {word_count} words. "
                 f"Minimum is ~{min_word_target} words for '{style}' style "
                 f"(hard floor: {hard_min}). Please add more content."
             )
-        if word_count > hard_max:
+            _write_failure_snapshot(
+                run_dir=paths["run_dir"],
+                stage="custom_script_validation",
+                reason=reason,
+                extra={"style": style, "word_count": word_count},
+            )
             raise RuntimeError(
+                reason
+            )
+        if word_count > hard_max:
+            reason = (
                 f"Script too long: {word_count} words. "
                 f"Maximum is ~{max_word_target} words for '{style}' style "
                 f"(hard ceiling: {hard_max}). Please shorten your script."
+            )
+            _write_failure_snapshot(
+                run_dir=paths["run_dir"],
+                stage="custom_script_validation",
+                reason=reason,
+                extra={"style": style, "word_count": word_count},
+            )
+            raise RuntimeError(
+                reason
             )
 
         # Validate script format for dialogue mode
         if style == "dialogue":
             parsed_dialogue = generator.parse_dialogue(script_text)
             if not parsed_dialogue:
-                raise RuntimeError(
+                reason = (
                     "Custom script is not in valid dialogue format. "
                     "Expected format: 'A: text' and 'B: text' on separate lines."
+                )
+                _write_failure_snapshot(
+                    run_dir=paths["run_dir"],
+                    stage="custom_script_validation",
+                    reason=reason,
+                    extra={"style": style},
+                )
+                raise RuntimeError(
+                    reason
                 )
 
             # Check dialogue alternation
             from reelforge.pipeline.quality_gate import _dialogue_is_strictly_alternating
             if not _dialogue_is_strictly_alternating(script_text):
-                raise RuntimeError(
+                reason = (
                     "Custom dialogue script is not in strict alternating speaker format. "
                     "Speaker A must be followed by speaker B, then A, then B, etc."
+                )
+                _write_failure_snapshot(
+                    run_dir=paths["run_dir"],
+                    stage="custom_script_validation",
+                    reason=reason,
+                    extra={"style": style},
+                )
+                raise RuntimeError(
+                    reason
                 )
 
         # Save script
@@ -296,6 +374,11 @@ def _run_generate_pipeline(
                 )
 
         if not Path(paths["audio"]).exists():
+            _write_failure_snapshot(
+                run_dir=paths["run_dir"],
+                stage="tts_generation",
+                reason="TTS failed to generate audio from custom script.",
+            )
             raise RuntimeError("TTS failed to generate audio from custom script.")
 
         final_duration = _audio_duration(str(paths["audio"]))
@@ -402,11 +485,18 @@ def _run_generate_pipeline(
                         model_candidates[model_index],
                     )
                 if attempt == attempts_allowed and not audio_created:
+                    _write_failure_snapshot(
+                        run_dir=paths["run_dir"],
+                        stage="script_generation",
+                        reason=last_failure_reason,
+                        extra={"attempt": attempt, "model": model_in_use},
+                    )
                     raise RuntimeError(
                         f"Could not generate script after {attempts_allowed} attempts. "
                         f"Last failure: {last_failure_reason}"
                     )
                 continue
+            script_text = _sanitize_dialogue_if_needed(script_text)
             word_count = len(script_text.split())
             logger.info("Generated script with %d words", word_count)
 
@@ -427,6 +517,7 @@ def _run_generate_pipeline(
                         details=enhanced_details,
                         model=model_in_use,
                     )
+                    repaired_script = _sanitize_dialogue_if_needed(repaired_script)
                     repaired_word_count = len(repaired_script.split())
                     logger.info("Expanded script candidate has %d words", repaired_word_count)
                     if repaired_word_count >= min_word_target:
@@ -455,6 +546,15 @@ def _run_generate_pipeline(
                     )
                 if attempt < attempts_allowed:
                     continue
+                _write_failure_snapshot(
+                    run_dir=paths["run_dir"],
+                    stage="script_generation",
+                    reason=(
+                        f"No script met minimum length after {attempts_used} attempts. "
+                        f"Last attempt had {word_count} words (required at least {min_word_target})."
+                    ),
+                    extra={"attempts_used": attempts_used, "word_count": word_count},
+                )
                 raise RuntimeError(
                     f"No script met minimum length after {attempts_used} attempts. "
                     f"Last attempt had {word_count} words (required at least {min_word_target})."
@@ -476,6 +576,12 @@ def _run_generate_pipeline(
                             "Use strict alternating format like 'A: ...' and 'B: ...' for each line."
                         ).strip()
                         if attempt == attempts_allowed and not audio_created:
+                            _write_failure_snapshot(
+                                run_dir=paths["run_dir"],
+                                stage="dialogue_validation",
+                                reason="Could not parse dialogue in any generation attempt.",
+                                extra={"attempt": attempt},
+                            )
                             raise RuntimeError("Could not parse dialogue in any generation attempt.")
                         continue
 
@@ -491,6 +597,12 @@ def _run_generate_pipeline(
                             "Never have two consecutive lines from the same speaker."
                         ).strip()
                         if attempt == attempts_allowed and not audio_created:
+                            _write_failure_snapshot(
+                                run_dir=paths["run_dir"],
+                                stage="dialogue_validation",
+                                reason="Could not generate strictly alternating dialogue after all attempts.",
+                                extra={"attempt": attempt},
+                            )
                             raise RuntimeError("Could not generate strictly alternating dialogue after all attempts.")
                         continue
 
@@ -537,6 +649,15 @@ def _run_generate_pipeline(
                 last_failure_reason = "TTS did not produce audio file."
                 logger.warning("%s", last_failure_reason)
                 if attempt == attempts_allowed:
+                    _write_failure_snapshot(
+                        run_dir=paths["run_dir"],
+                        stage="tts_generation",
+                        reason=(
+                            f"Could not generate audio after {attempts_allowed} attempts. "
+                            f"Reason: {last_failure_reason}"
+                        ),
+                        extra={"attempt": attempt},
+                    )
                     raise RuntimeError(
                         f"Could not generate audio after {attempts_allowed} attempts. "
                         f"Reason: {last_failure_reason}"
@@ -609,6 +730,14 @@ def _run_generate_pipeline(
             ).strip()
 
     if not audio_created:
+        _write_failure_snapshot(
+            run_dir=paths["run_dir"],
+            stage="tts_generation",
+            reason=(
+                "No audio file was created during generation attempts. "
+                f"Last failure: {last_failure_reason}"
+            ),
+        )
         raise RuntimeError(
             "No audio file was created during generation attempts. "
             f"Last failure: {last_failure_reason}"
@@ -628,6 +757,14 @@ def _run_generate_pipeline(
                 best_duration,
             )
         else:
+            _write_failure_snapshot(
+                run_dir=paths["run_dir"],
+                stage="duration_resolution",
+                reason=(
+                    "Duration target not met and no fallback audio available. "
+                    f"Last failure: {last_failure_reason}"
+                ),
+            )
             raise RuntimeError(
                 "Duration target not met and no fallback audio available. "
                 f"Last failure: {last_failure_reason}"
@@ -663,6 +800,11 @@ def _run_generate_pipeline(
 
     if early_failures:
         logger.error("Pre-render quality check failed: %s", " | ".join(early_failures))
+        _write_failure_snapshot(
+            run_dir=paths["run_dir"],
+            stage="pre_render_quality_gate",
+            reason=" | ".join(early_failures),
+        )
         raise RuntimeError(
             "Quality gate failed before video composition. "
             f"Failures: {'; '.join(early_failures)}"
@@ -786,29 +928,16 @@ def _run_generate_pipeline(
         except Exception as e:
             logger.warning("Audio mixing failed, using original audio: %s", e)
 
-    if progress_enabled:
-        last_progress = {"value": -1}
-        click.echo("Composing video:   0%", nl=False)
+    try:
+        if progress_enabled:
+            last_progress = {"value": -1}
+            click.echo("Composing video:   0%", nl=False)
 
-        def _on_compose_progress(percent: int) -> None:
-            if percent != last_progress["value"]:
-                last_progress["value"] = percent
-                click.echo(f"\rComposing video: {percent:3d}%", nl=False)
+            def _on_compose_progress(percent: int) -> None:
+                if percent != last_progress["value"]:
+                    last_progress["value"] = percent
+                    click.echo(f"\rComposing video: {percent:3d}%", nl=False)
 
-        result_video = compositor.compose_video(
-            audio_path=str(paths["audio"]),
-            captions_data=formatted_captions,
-            output_path=str(paths["video"]),
-            background_path=background,
-            character_path=character,
-            secondary_character_path=secondary_character,
-            speaker_timeline=speaker_timeline,
-            screenshots_data=screenshots_data,
-            progress_callback=_on_compose_progress,
-        )
-        click.echo("\rComposing video: 100%")
-    else:
-        with reporter.stage("Composing video"):
             result_video = compositor.compose_video(
                 audio_path=str(paths["audio"]),
                 captions_data=formatted_captions,
@@ -818,7 +947,28 @@ def _run_generate_pipeline(
                 secondary_character_path=secondary_character,
                 speaker_timeline=speaker_timeline,
                 screenshots_data=screenshots_data,
+                progress_callback=_on_compose_progress,
             )
+            click.echo("\rComposing video: 100%")
+        else:
+            with reporter.stage("Composing video"):
+                result_video = compositor.compose_video(
+                    audio_path=str(paths["audio"]),
+                    captions_data=formatted_captions,
+                    output_path=str(paths["video"]),
+                    background_path=background,
+                    character_path=character,
+                    secondary_character_path=secondary_character,
+                    speaker_timeline=speaker_timeline,
+                    screenshots_data=screenshots_data,
+                )
+    except Exception as exc:
+        _write_failure_snapshot(
+            run_dir=paths["run_dir"],
+            stage="video_composition",
+            reason=str(exc),
+        )
+        raise
 
     size_mb = os.path.getsize(result_video) / (1024 * 1024)
     selected_background = getattr(compositor, "last_background_path", None) or background
@@ -854,6 +1004,7 @@ def _run_generate_pipeline(
         "topic": topic,
         "style": style,
         "duration_seconds": round(final_duration, 3),
+        "duration_target_met": duration_accepted,
         "word_count": quality["script_word_count"],
         "attempts": attempts_used,
         "background": selected_background,
@@ -904,6 +1055,10 @@ def _run_generate_pipeline(
         "caption_coverage_ratio": quality["caption_coverage_ratio"],
         "quality_verdict": quality["quality_verdict"],
         "quality_failures": quality["quality_failures"],
+        "script_sanitization_applied": script_sanitization_applied,
+        "script_sanitization_changes": script_sanitization_changes,
+        "failure_stage": None,
+        "failure_reason": None,
         "log_file": str(log_path),
         "drive_upload_enabled": bool(cfg.get("integrations", {}).get("google_drive", {}).get("enabled", False)),
     }
@@ -913,6 +1068,12 @@ def _run_generate_pipeline(
     if quality["quality_verdict"] == "trash":
         with open(paths["metadata"], "w", encoding="utf-8") as handle:
             json.dump(metadata, handle, indent=2)
+        _write_failure_snapshot(
+            run_dir=paths["run_dir"],
+            stage="quality_gate",
+            reason="; ".join(quality["quality_failures"]),
+            extra={"quality_verdict": quality["quality_verdict"]},
+        )
         raise RuntimeError(
             "Quality gate failed with verdict=trash. "
             f"Failures: {'; '.join(quality['quality_failures'])}"

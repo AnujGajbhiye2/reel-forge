@@ -456,6 +456,13 @@ class VideoCompositor:
             return clip.with_opacity(value)
         return clip.set_opacity(value)
 
+    @staticmethod
+    def _set_position(clip: ImageClip, value: Any) -> ImageClip:
+        """Compatibility helper across MoviePy versions."""
+        if hasattr(clip, "with_position"):
+            return clip.with_position(value)
+        return clip.set_position(value)
+
     def _create_dialogue_character_clips(
         self,
         character_a_path: str,
@@ -550,9 +557,9 @@ class VideoCompositor:
                     amplitude = animator.get_amplitude(actual_time, rate, audio_data)
                     bounce = int(amplitude * animator.bounce_pixels)
                     return (base_x, base_y - bounce)
-                left = left.set_position(left_pos_func)
+                left = self._set_position(left, left_pos_func)
             else:
-                left = left.with_position((left_x, left_y))
+                left = self._set_position(left, (left_x, left_y))
 
             left_active = active_speaker == primary_speaker
             if left_active:
@@ -580,9 +587,9 @@ class VideoCompositor:
                     amplitude = animator.get_amplitude(actual_time, rate, audio_data)
                     bounce = int(amplitude * animator.bounce_pixels)
                     return (base_x, base_y - bounce)
-                right = right.set_position(right_pos_func)
+                right = self._set_position(right, right_pos_func)
             else:
-                right = right.with_position((right_x, right_y))
+                right = self._set_position(right, (right_x, right_y))
 
             right_active = active_speaker == secondary_speaker or (secondary_speaker is None and active_speaker != primary_speaker)
             if right_active:
@@ -783,5 +790,6 @@ class VideoCompositor:
 
             return Path(output_path)
 
-        except Exception as e:
-            raise Exception(f"Video composition failed: {str(e)}")
+        except Exception as exc:
+            self.logger.exception("Video composition failed for output %s", output_path)
+            raise RuntimeError(f"Video composition failed: {exc}") from exc

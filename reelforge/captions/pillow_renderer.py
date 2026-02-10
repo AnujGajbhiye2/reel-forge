@@ -159,8 +159,15 @@ def build_karaoke_clips(
 
                 # Create ImageClip for this word's duration
                 clip = ImageClip(frame, duration=word_end - word_start)
-                clip = clip.set_start(word_start)
-                clip = clip.set_position(('center', position_y))
+                if hasattr(clip, "with_start"):
+                    clip = clip.with_start(word_start)
+                else:  # pragma: no cover - MoviePy v1 fallback
+                    clip = clip.set_start(word_start)
+
+                if hasattr(clip, "with_position"):
+                    clip = clip.with_position(('center', position_y))
+                else:  # pragma: no cover - MoviePy v1 fallback
+                    clip = clip.set_position(('center', position_y))
 
                 clips.append(clip)
 
