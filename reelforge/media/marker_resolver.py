@@ -103,7 +103,45 @@ class MarkerResolver:
             logger.info("Resolved marker %s to timestamp %.2f-%.2f",
                        marker_pos.marker_id, start, end)
 
-        return screenshots_data
+        return self._resolve_timing_conflicts(screenshots_data, audio_end=word_captions[-1]["end"])
+
+    def _resolve_timing_conflicts(
+        self,
+        screenshots_data: List[Dict[str, Any]],
+        audio_end: float,
+    ) -> List[Dict[str, Any]]:
+        """Prevent screenshot overlays from overlapping in time."""
+        if not screenshots_data:
+            return screenshots_data
+
+        ordered = sorted(screenshots_data, key=lambda shot: float(shot.get("start", 0.0)))
+        epsilon = 0.001
+        prev_end = -epsilon
+
+        for idx, shot in enumerate(ordered):
+            original_start = max(0.0, float(shot.get("start", 0.0)))
+            if original_start < prev_end:
+                start = prev_end + epsilon
+            else:
+                start = original_start
+
+            end = min(float(audio_end), float(shot.get("end", start + self.min_duration)))
+            end = min(end, start + self.max_duration)
+            if end - start < self.min_duration:
+                end = min(float(audio_end), start + self.min_duration)
+
+            if idx + 1 < len(ordered):
+                next_start = float(ordered[idx + 1].get("start", end))
+                if end > next_start:
+                    end = max(start, next_start)
+
+            end = max(start, min(float(audio_end), end))
+            prev_end = end
+
+            shot["start"] = round(start, 3)
+            shot["end"] = round(end, 3)
+
+        return ordered
 
     def _parse_dialogue_lines(self, dialogue_text: str) -> List[Dict[str, Any]]:
         """

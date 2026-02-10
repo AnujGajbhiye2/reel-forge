@@ -37,6 +37,7 @@ class TTSEngine:
         self.voice = config['tts']['voice']
         self.rate = config['tts'].get('rate', '+0%')
         self.pitch = config['tts'].get('pitch', '+0Hz')
+        self.dialogue_voice_map = config['tts'].get('dialogue_voice_map', {})
 
     async def synthesize(
         self,
@@ -137,10 +138,21 @@ class TTSEngine:
         """
         # Default voice mapping if not provided.
         if voice_mapping is None:
-            voices = ["en-US-GuyNeural", "en-US-JennyNeural", self.voice]
-            voice_mapping = {}
-            for idx, character in enumerate(dialogue.keys()):
-                voice_mapping[character] = voices[idx] if idx < len(voices) else self.voice
+            configured_map = {
+                str(char): str(voice)
+                for char, voice in self.dialogue_voice_map.items()
+                if char and voice
+            }
+            if configured_map:
+                voice_mapping = {
+                    char: configured_map.get(char, self.voice)
+                    for char in dialogue.keys()
+                }
+            else:
+                voices = ["en-US-AndrewNeural", "en-US-AriaNeural", self.voice]
+                voice_mapping = {}
+                for idx, character in enumerate(dialogue.keys()):
+                    voice_mapping[character] = voices[idx] if idx < len(voices) else self.voice
 
         # Ensure output directory exists
         output_dir = os.path.dirname(output_path) or '.'

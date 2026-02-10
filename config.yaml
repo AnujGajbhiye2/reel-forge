@@ -22,7 +22,10 @@ script:
 tts:
   provider: "edge"  # "edge" (EdgeTTS) or "kokoro" (Kokoro-82M)
   engine: "edge"    # Legacy field, kept for compatibility
-  voice: "en-US-AndrewNeural"  # Male voice (more energetic than Christopher)
+  voice: "en-US-AndrewNeural"  # Primary narrator voice
+  dialogue_voice_map:
+    A: "en-US-AndrewNeural"
+    B: "en-US-AriaNeural"
   rate: "+15%"  # Faster for social media (was +5%, now +15%)
   pitch: "+0Hz"
 
@@ -166,6 +169,7 @@ video:
     left_x_ratio: 0.08
     right_x_ratio: 0.60
     bottom_y_px: 460
+    height_px: 620
     active_opacity: 1.0
     inactive_opacity: 0.05
     inactive_mode: "hidden"  # hidden, dim
@@ -201,3 +205,13 @@ screenshots:
   duration_seconds: 4.0
   min_duration_seconds: 2.0
   max_duration_seconds: 6.0
+
+# Overlay card tuning for resolved screenshots
+research:
+  overlay:
+    width_ratio: 0.78
+    y_px: 42
+    top_margin_px: 24
+    bottom_margin_px: 18
+    max_height_ratio: 0.85
+    crossfade_sec: 0.2
