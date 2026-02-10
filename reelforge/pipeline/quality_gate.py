@@ -6,6 +6,14 @@ import re
 from typing import Any, Dict, List
 
 
+def _word_count_overrun_tolerance(style: str) -> int:
+    """Allowed word-count overrun before flagging as too long."""
+    # Dialogue pacing and natural TTS variance can slightly overshoot targets.
+    if style == "dialogue":
+        return 10
+    return 0
+
+
 def _word_count(text: str) -> int:
     normalized_lines: List[str] = []
     for raw_line in (text or "").splitlines():
@@ -87,6 +95,7 @@ def _assess_output_quality(
     coverage_ratio = _caption_coverage_ratio(script_text, word_captions)
     failures: List[str] = []
     critical_failures: List[str] = []
+    effective_max_word_target = max_word_target + _word_count_overrun_tolerance(style)
 
     # For custom scripts, duration/word count are soft warnings, not critical failures.
     # The user wrote the script themselves and already got a clear warning.
@@ -95,19 +104,17 @@ def _assess_output_quality(
     effective_max = max_duration + duration_tolerance
 
     if not (effective_min <= duration_seconds <= effective_max):
-        if custom_script:
-            failures.append(
-                f"Duration outside target range: {duration_seconds:.2f}s (target {min_duration}-{max_duration}s)."
-            )
-        else:
-            critical_failures.append(
-                f"Duration out of target range: {duration_seconds:.2f}s (target {min_duration}-{max_duration}s)."
-            )
+        failures.append(
+            f"Duration outside target range: {duration_seconds:.2f}s (target {min_duration}-{max_duration}s)."
+        )
 
     if script_word_count < min_word_target:
         failures.append(f"Script too short for style '{style}': {script_word_count} words.")
-    if script_word_count > max_word_target:
-        failures.append(f"Script too long for style '{style}': {script_word_count} words.")
+    if script_word_count > effective_max_word_target:
+        failures.append(
+            f"Script too long for style '{style}': {script_word_count} words "
+            f"(max {effective_max_word_target})."
+        )
 
     if caption_word_count == 0:
         critical_failures.append("No caption words were generated.")

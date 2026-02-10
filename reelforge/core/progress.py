@@ -30,7 +30,6 @@ class StageReporter:
         else:
             click.echo(f"{label}...")
             yield
-
-        elapsed = perf_counter() - start
-        click.echo(f"{label} done ({elapsed:.1f}s)")
+            elapsed = perf_counter() - start
+            click.echo(f"{label} done ({elapsed:.1f}s)")
 

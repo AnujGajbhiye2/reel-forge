@@ -17,7 +17,17 @@
     "us": "https://www.usa.gov/",
     "clean": "https://www.ccleaner.com/ccleaner/download",
     "code": "https://code.visualstudio.com/",
-    "design": "https://www.design.com/"
+    "design": "https://www.design.com/",
+    "the pragmatic programmer": "https://en.wikipedia.org/wiki/The_Pragmatic_Programmer",
+    "design patterns": "https://refactoring.guru/design-patterns",
+    "you don’t know js": "https://github.com/getify/You-Dont-Know-JS",
+    "software engineering books": "https://hackr.io/blog/software-engineering-books",
+    "coding books": "https://www.amazon.com/coding-Books/s?k=coding&rh=n:283155",
+    "claude companion": "https://claudecompanion.com",
+    "smart summarizer": "https://smartsummarizer.com",
+    "creative boost": "https://creative-boost.com/",
+    "task tracker": "https://www.tasktracker.io/",
+    "top claude plugins": "https://topclaudeplugins.com"
   },
   "assets": {
     "be371a8a9386b643e4e8931be2e12cef09a503c998b172aa285fe9631588522e": {
@@ -46,6 +56,15 @@
     },
     "663af5470a7e9a883edba7cc780b4b9caa1181c37a8696e0297e5a1fdcc35a81": {
       "cached_rel_path": "assets/663af5470a7e9a883edba7cc780b4b9caa1181c37a8696e0297e5a1fdcc35a81.jpg"
+    },
+    "f7c93af9e8d7659d64d7738c803df01984ad83c1b8a003020cdf21b68c64ba73": {
+      "cached_rel_path": "assets/f7c93af9e8d7659d64d7738c803df01984ad83c1b8a003020cdf21b68c64ba73.jpg"
+    },
+    "eff99da849a3c7b4b3f1f16014c15b8ca48734edf86829c4346179edb9eae577": {
+      "cached_rel_path": "assets/eff99da849a3c7b4b3f1f16014c15b8ca48734edf86829c4346179edb9eae577.webp"
+    },
+    "b20b4977b1e24d38ea6e57d93a879c154153af862853b1192e81a30d802777ee": {
+      "cached_rel_path": "assets/b20b4977b1e24d38ea6e57d93a879c154153af862853b1192e81a30d802777ee.webp"
     }
   }
 }

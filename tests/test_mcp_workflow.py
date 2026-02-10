@@ -10,8 +10,8 @@ class TestMCPGeneratorFallback:
     """Test MCP generator with fallback logic."""
 
     @patch('reelforge.script.mcp_generator.Path')
-    def test_mcp_unavailable_uses_gemini(self, mock_path):
-        """Test fallback to Gemini when MCP server unavailable."""
+    def test_mcp_unavailable_uses_openai(self, mock_path):
+        """Test fallback to OpenAI when MCP server unavailable."""
         from reelforge.script.mcp_generator import MCPScriptGenerator
 
         # Mock MCP server not existing
@@ -22,11 +22,11 @@ class TestMCPGeneratorFallback:
                 "use_mcp": True,
                 "mcp_server_path": "/nonexistent/server.py",
                 "mcp_python_path": "/nonexistent/python",
-                "model": "gemini-2.5-pro",
+                "model": "gpt-4o-mini",
                 "temperature": 0.7,
                 "max_tokens": 1000,
             },
-            "gemini_api_key": "test-key",
+            "openai_api_key": "test-key",
         }
 
         generator = MCPScriptGenerator(config)
@@ -42,16 +42,16 @@ class TestMCPGeneratorFallback:
                 "mcp_server_path": "/path/server.py",
                 "mcp_python_path": "/path/python",
                 "mcp_timeout_seconds": 45,
-                "model": "gemini-2.5-pro",
+                "model": "gpt-4o-mini",
                 "temperature": 0.8,
                 "max_tokens": 1500,
             },
-            "gemini_api_key": "test-key",
+            "openai_api_key": "test-key",
         }
 
         generator = MCPScriptGenerator(config)
         assert generator.mcp_timeout == 45
-        assert generator.gemini_model == "gemini-2.5-pro"
+        assert generator.openai_model == "gpt-4o-mini"
         assert generator.temperature == 0.8
         assert generator.max_tokens == 1500
 
@@ -177,7 +177,7 @@ class TestOrchestratorIntegration:
         sig = inspect.signature(_run_generate_pipeline)
 
         assert sig.parameters["websites"].default is None
-        assert sig.parameters["length"].default == "45s"
+        assert sig.parameters["length"].default == "60s"
         assert sig.parameters["profanity"].default == "none"
         assert sig.parameters["disable_mcp"].default is False
         assert sig.parameters["image_map_path"].default is None

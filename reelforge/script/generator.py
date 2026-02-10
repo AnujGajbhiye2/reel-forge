@@ -11,7 +11,7 @@ from reelforge.script.templates.prompts import SOLO_NARRATOR_PROMPT, DIALOGUE_PR
 
 class ScriptGenerator:
     """
-    Generates video scripts using Gemini models.
+    Generates video scripts using OpenAI models.
 
     This module handles:
     - Solo narrator scripts
@@ -27,13 +27,16 @@ class ScriptGenerator:
             config: Configuration dictionary containing API keys and model settings
         """
         self.config = config
-        self.api_key = config.get('gemini_api_key')
+        self.api_key = config.get('openai_api_key') or config.get('gemini_api_key')
 
-        if not self.api_key or self.api_key == 'YOUR_GEMINI_API_KEY_HERE':
+        if (
+            not self.api_key
+            or self.api_key in {'YOUR_OPENAI_API_KEY_HERE', 'YOUR_GEMINI_API_KEY_HERE'}
+        ):
             raise ValueError(
-                "Gemini API key not configured. "
-                "Please set 'gemini_api_key' in config.yaml. "
-                "Get your key from: https://aistudio.google.com/app/apikey"
+                "OpenAI API key not configured. "
+                "Please set 'openai_api_key' in config.yaml. "
+                "Get your key from: https://platform.openai.com/api-keys"
             )
 
         primary_model = config['script']['model']
@@ -45,69 +48,57 @@ class ScriptGenerator:
         self.temperature = config['script']['temperature']
         self.max_tokens = config['script']['max_tokens']
         self.logger = get_logger()
-        self.provider = config.get("script", {}).get("provider", "gemini")
+        self.provider = config.get("script", {}).get("provider", "openai")
 
-        self._sdk = None
-        self._sdk_types = None
         self._client = None
 
-    def _ensure_genai_client(self) -> None:
-        if self.provider != "gemini":
-            raise ValueError(f"Unsupported script provider '{self.provider}'. Expected 'gemini'.")
+    def _ensure_openai_client(self) -> None:
+        if self.provider != "openai":
+            raise ValueError(f"Unsupported script provider '{self.provider}'. Expected 'openai'.")
 
         if self._client is not None:
             return
 
         try:
-            from google import genai
-            from google.genai import types
+            from openai import OpenAI
         except ImportError as exc:
             raise ImportError(
-                "google-genai is required for Gemini script generation. "
-                "Install with: pip install google-genai"
+                "openai is required for OpenAI script generation. "
+                "Install with: pip install openai"
             ) from exc
 
-        self._sdk = genai
-        self._sdk_types = types
-        self._client = genai.Client(api_key=self.api_key)
+        self._client = OpenAI(api_key=self.api_key)
 
-    def _extract_genai_text(self, response: Any) -> str:
-        text = getattr(response, "text", None)
+    def _extract_openai_text(self, response: Any) -> str:
+        choices = getattr(response, "choices", None) or []
+        if not choices:
+            return ""
+
+        message = getattr(choices[0], "message", None)
+        text = getattr(message, "content", None) if message is not None else None
         if isinstance(text, str) and text.strip():
             return text.strip()
 
-        candidates = getattr(response, "candidates", None) or []
-        extracted = []
-        for candidate in candidates:
-            content = getattr(candidate, "content", None)
-            if content is None:
-                continue
-            parts = getattr(content, "parts", None) or []
-            for part in parts:
-                part_text = getattr(part, "text", None)
-                if isinstance(part_text, str) and part_text.strip():
-                    extracted.append(part_text.strip())
-
-        return "\n".join(extracted).strip()
+        return ""
 
     # Backward-compatible name used in tests and older code paths.
     def _extract_text_content(self, response: Any) -> str:
-        return self._extract_genai_text(response)
+        return self._extract_openai_text(response)
 
     def _response_debug_summary(self, response: Any) -> str:
-        candidates = getattr(response, "candidates", None)
-        if not candidates:
-            return "no candidates in response"
+        choices = getattr(response, "choices", None)
+        if not choices:
+            return "no choices in response"
 
-        first = candidates[0]
+        first = choices[0]
         finish_reason = getattr(first, "finish_reason", None)
-        finish_message = getattr(first, "finish_message", None)
+        finish_message = None
 
-        usage = getattr(response, "usage_metadata", None)
+        usage = getattr(response, "usage", None)
         if usage is not None:
-            prompt_tokens = getattr(usage, "prompt_token_count", None)
-            completion_tokens = getattr(usage, "candidates_token_count", None)
-            total_tokens = getattr(usage, "total_token_count", None)
+            prompt_tokens = getattr(usage, "prompt_tokens", None)
+            completion_tokens = getattr(usage, "completion_tokens", None)
+            total_tokens = getattr(usage, "total_tokens", None)
             usage_str = (
                 f"usage(prompt={prompt_tokens}, completion={completion_tokens}, total={total_tokens})"
             )
@@ -116,20 +107,25 @@ class ScriptGenerator:
 
         return f"finish_reason={finish_reason}, finish_message={finish_message}, {usage_str}"
 
-    def _generate_with_gemini(self, prompt: str, model: Optional[str] = None) -> str:
-        self._ensure_genai_client()
-        gen_cfg = self._sdk_types.GenerateContentConfig(
-            system_instruction="You are a viral short-form content scriptwriter specializing in AI and tech topics.",
-            temperature=self.temperature,
-            max_output_tokens=self.max_tokens,
-        )
-
-        response = self._client.models.generate_content(
+    def _generate_with_openai(self, prompt: str, model: Optional[str] = None) -> str:
+        self._ensure_openai_client()
+        response = self._client.chat.completions.create(
             model=model or self.model,
-            contents=prompt,
-            config=gen_cfg,
+            messages=[
+                {
+                    "role": "system",
+                    "content": "You are a viral short-form content scriptwriter specializing in AI and tech topics.",
+                },
+                {"role": "user", "content": prompt},
+            ],
+            temperature=self.temperature,
+            max_tokens=self.max_tokens,
         )
-        return self._extract_genai_text(response), response
+        return self._extract_openai_text(response), response
+
+    # Backward-compatible name used by older code paths.
+    def _generate_with_gemini(self, prompt: str, model: Optional[str] = None) -> str:
+        return self._generate_with_openai(prompt=prompt, model=model)
 
     def validate_script_length(self, script: str, style: str = "solo") -> tuple[bool, str]:
         """
@@ -216,7 +212,7 @@ class ScriptGenerator:
 
         try:
             self.logger.debug("Prompt sent to model %s: %s", model or self.model, prompt)
-            script, response = self._generate_with_gemini(prompt=prompt, model=model)
+            script, response = self._generate_with_openai(prompt=prompt, model=model)
             if not script:
                 raise ValueError(
                     "Empty script response from model "
@@ -255,7 +251,7 @@ class ScriptGenerator:
 
         try:
             self.logger.debug("Prompt sent to model %s: %s", model or self.model, prompt)
-            script_text, response = self._generate_with_gemini(prompt=prompt, model=model)
+            script_text, response = self._generate_with_openai(prompt=prompt, model=model)
             if not script_text:
                 raise ValueError(
                     "Empty dialogue response from model "
@@ -323,7 +319,7 @@ class ScriptGenerator:
 
         try:
             self.logger.debug("Prompt sent to model %s: %s", model or self.model, prompt)
-            expanded, response = self._generate_with_gemini(prompt=prompt, model=model)
+            expanded, response = self._generate_with_openai(prompt=prompt, model=model)
             if not expanded:
                 raise ValueError(
                     "Empty expansion response from model "

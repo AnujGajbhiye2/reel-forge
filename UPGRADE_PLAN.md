@@ -10,9 +10,11 @@ The existing codebase is described in `CLAUDE.md`. Read that first if you haven'
 
 ## TIER 1 — Highest Impact, Implement First
 
-### Task 1.1: Karaoke-Style Captions with Pillow Rendering
+### Task 1.1: Karaoke-Style Captions with Pillow Rendering ✅ COMPLETED
 
 **Problem:** Current captions use MoviePy TextClip which only supports one color per clip. Rival accounts use CapCut-style captions where the active word is highlighted in yellow while other words stay white, with thick black outlines.
+
+**Status:** Completed 2026-02-09. Font downloaded, `pillow_renderer.py` created, `video_compositor.py` updated with conditional branch, config updated with new settings. Validation passed.
 
 **Implementation:**
 
@@ -100,9 +102,11 @@ captions:
 
 ---
 
-### Task 1.2: Sound Effects & Background Music Layer
+### Task 1.2: Sound Effects & Background Music Layer ✅ COMPLETED
 
 **Problem:** Videos have no sound design — just voiceover. Adding layered audio (background music, transition whooshes, pop sounds) dramatically increases perceived quality.
+
+**Status:** Completed 2026-02-10. Audio assets generated (whoosh, pop, sting SFX + ambient music), pydub installed, `mixer.py` created, orchestrator integration added, config updated. Validation passed.
 
 **Implementation:**
 
@@ -212,9 +216,11 @@ paths:
 
 ---
 
-### Task 1.3: Upgraded Script Prompt Templates
+### Task 1.3: Upgraded Script Prompt Templates ✅ COMPLETED
 
 **Problem:** Current prompt produces generic scripts. Rival accounts use the "smart vs. naive" character dynamic with stronger hooks, escalating reveals, and comment-driving CTAs.
+
+**Status:** Completed 2026-02-10. Created `hooks.py` with hook/CTA templates (5 categories each), upgraded MCP prompt (V2) with Character A/B definitions and beat-by-beat timing, integrated hook library in generator with random injection, added hook validation (first line < 10 words) in orchestrator retry loop. Validation passed.
 
 **Implementation:**
 
@@ -329,9 +335,11 @@ CTA_TEMPLATES = {
 
 ## TIER 2 — High Impact, Implement Next
 
-### Task 2.1: Audio-Reactive Character Animation
+### Task 2.1: Audio-Reactive Character Animation ✅ COMPLETED
 
 **Problem:** Characters are static PNGs. Even subtle animation (bobbing when speaking) dramatically increases perceived quality.
+
+**Status:** Completed 2026-02-10. Added scipy dependency, created `character_animator.py` with audio amplitude analysis, integrated in video compositor with per-segment position functions, updated config with animation settings. Validation passed.
 
 **Implementation:**
 
@@ -404,9 +412,11 @@ character:
 
 ---
 
-### Task 2.2: Kokoro TTS Integration (Optional Upgrade)
+### Task 2.2: Kokoro TTS Integration (Optional Upgrade) ✅ COMPLETED
 
 **Problem:** EdgeTTS sounds robotic. Kokoro-82M is free, Apache 2.0 licensed, pip-installable, runs on CPU, and sounds significantly more natural.
+
+**Status:** Completed 2026-02-10. Added kokoro and soundfile dependencies, created `kokoro_engine.py` with synthesize_sync and synthesize_dialogue_sync methods matching TTSEngine interface, integrated in orchestrator with graceful fallback to EdgeTTS, updated config with Kokoro voice settings. Validation passed.
 
 **Implementation:**
 
@@ -487,9 +497,11 @@ tts:
 
 ---
 
-### Task 2.3: Background Clip Transitions
+### Task 2.3: Background Clip Transitions ✅ COMPLETED
 
 **Problem:** Background gameplay clips cut abruptly. Even a 0.3s crossfade makes them feel professional.
+
+**Status:** Completed 2026-02-10. Added `create_background_with_transitions()` and `apply_ken_burns()` methods to video compositor, integrated in `process_background()` with conditional logic, updated config with transition settings. Validation passed.
 
 **Implementation:**
 
@@ -549,9 +561,11 @@ def apply_ken_burns(self, clip, zoom_ratio=0.04):
 
 ---
 
-### Task 2.4: Multiple Character Poses / Expression Switching
+### Task 2.4: Multiple Character Poses / Expression Switching ✅ COMPLETED
 
 **Problem:** Single static character image for the entire video is flat. Switching between 3-4 poses per emotion adds life.
+
+**Status:** Completed 2026-02-10. Created character pose directories (char_a, char_b) with placeholder poses, created `expression_mapper.py` with keyword-based expression detection, updated video compositor to support directory-based characters with pose selection per segment, updated config with character_dirs settings. Validation passed.
 
 **Implementation:**
 

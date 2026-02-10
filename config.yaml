@@ -3,24 +3,25 @@
 # App Runtime
 app:
   mode: "dev"  # dev or prod
+openai_api_key: "YOUR_OPENAI_API_KEY_HERE"
 
-# Script Generation (Native Google Gemini SDK)
+# Script Generation (OpenAI SDK)
 script:
-  provider: "gemini"
+  provider: "openai"
   use_mcp: true  # Enable MCP integration (default ON)
   mcp_server_path: "/home/anuj/.claude/mcp-servers/reelforge-writer/server.py"
   mcp_python_path: "/home/anuj/.claude/mcp-servers/reelforge-writer/venv/bin/python"
   mcp_timeout_seconds: 30
-  model: "gemini-2.5-pro"
+  model: "gpt-4o-mini"
   fallback_models:
-    - "gemini-2.5-flash"
-    - "gemini-2.0-flash"
+    - "gpt-4o"
   temperature: 0.7
   max_tokens: 1000
 
 # Text-to-Speech
 tts:
-  engine: "edge"  # Using EdgeTTS (free, no API key needed)
+  provider: "edge"  # "edge" (EdgeTTS) or "kokoro" (Kokoro-82M)
+  engine: "edge"    # Legacy field, kept for compatibility
   voice: "en-US-AndrewNeural"  # Male voice (more energetic than Christopher)
   rate: "+15%"  # Faster for social media (was +5%, now +15%)
   pitch: "+0Hz"
@@ -28,6 +29,28 @@ tts:
   # Alternative voices to try (more natural sounding):
   # Male: en-US-GuyNeural, en-US-EricNeural, en-US-AndrewNeural
   # Female: en-US-JennyNeural, en-US-AriaNeural, en-US-MichelleNeural
+
+  # Kokoro TTS Settings (when provider: "kokoro")
+  kokoro_lang: "a"           # American English
+  kokoro_voice_a: "am_adam"  # Character A voice
+  kokoro_voice_b: "af_heart" # Character B voice
+
+# Audio Mixing (Background Music & Sound Effects)
+audio:
+  background_music: false  # Enable background music and SFX (set to true to enable)
+  music_volume_db: -18     # Background music level relative to voice
+  sfx_volume_db: -6        # Sound effects level relative to voice
+  auto_sfx: true           # Auto-add pop sounds at screenshot appearances
+
+# Character Animation
+character:
+  animation: "bounce"  # "bounce" or "none"
+  bounce_pixels: 15    # Max bounce height in pixels
+
+# Paths for Audio Assets
+paths:
+  sfx_dir: "assets/sfx"
+  music_dir: "assets/music"
 
 # Assets
 assets:
@@ -45,15 +68,32 @@ assets:
     - "assets/characters/character-2.png"
     - "assets/characters/character-3.png"
     - "assets/characters/character-4.png"
+  # Character Directories (for multi-pose support)
+  character_dirs:
+    char_a: "assets/characters/char_a"  # Directory with multiple poses
+    char_b: "assets/characters/char_b"  # Directory with multiple poses
   fonts:
     main: "assets/fonts/Poppins/Poppins-ExtraBold.ttf"
 
 # Caption Settings
 captions:
-  font_size: 70
+  # Renderer: "pillow" (karaoke) or "textclip" (legacy)
+  renderer: "pillow"
+
+  # Pillow Karaoke Settings
+  font: "assets/fonts/Montserrat-Black.ttf"
+  active_color: "#FFD700"    # Yellow for active word
+  inactive_color: "#FFFFFF"  # White for inactive words
+  words_per_group: 3         # Words to show per group
+  position_y: 0.62           # Relative Y position (0.62 = lower-center)
+
+  # Common Settings (used by both renderers)
+  font_size: 65              # Reduced from 70 for Montserrat Black
+  stroke_color: "#000000"    # Black outline
+  stroke_width: 4            # Thicker outline for better readability
+
+  # TextClip Legacy Settings (only used when renderer: "textclip")
   font_color: "white"
-  stroke_color: "black"
-  stroke_width: 3
   highlight_last_word: true
   highlight_color: "#19C4FF"
   bg_color: "#000000"
@@ -102,6 +142,13 @@ output:
   audio_codec: "aac"
   bitrate: "8000k"
 
+# Render safety guardrails
+render:
+  threads: 2
+  preset_dev: "veryfast"
+  preset_prod: "medium"
+  timeout_seconds: 900
+
 # Video Settings
 video:
   resolution:
@@ -122,6 +169,11 @@ video:
     active_opacity: 1.0
     inactive_opacity: 0.05
     inactive_mode: "hidden"  # hidden, dim
+  # Background Transitions
+  background_transitions: false  # Enable crossfade transitions
+  transition_duration: 0.3       # Crossfade duration in seconds
+  ken_burns: false               # Enable Ken Burns slow zoom effect
+  ken_burns_zoom_ratio: 0.04     # 4% zoom over clip duration
 
 # Integrations
 integrations:
@@ -142,78 +194,10 @@ integrations:
       max_attempts: 3
       backoff_seconds: 2.0
 
-# Media Harvest Integration
-media_harvest:
-  enabled: true  # Master switch (auto-enabled when use_mcp=true)
-  project_path: "/home/anuj/projects/screen-scraper"
-
-  # Harvest Configuration
-  harvest_config:
-    mode: "safe"  # safe, open, strict (safe = fallback to web images when screenshots fail)
-    transform_preset: "vertical_9_16"  # Match reel dimensions (1080×1920)
-    timeout_seconds: 30  # Use partial results on timeout
-    retry_attempts: 3
-    enable_cache: true
-    cache_dir: ".cache/media-harvest"
-    assets_per_entity: 1
-
-  # Screenshot Timing
-  screenshot_duration_seconds: 4.0
+# User-provided screenshots
+# Place files named S1.png, S2.jpg, etc. in the screenshots/ directory
+screenshots:
+  directory: "screenshots"
+  duration_seconds: 4.0
   min_duration_seconds: 2.0
   max_duration_seconds: 6.0
-
-# Free imagery strategy controls
-imagery:
-  strategy: "official_then_commons"
-  min_quality_score: 0.7
-  fallback_sources:
-    - "wikimedia"
-
-# Optional web screenshot research and timed overlay insertion (LEGACY fallback)
-research:
-  enabled: false
-  count:
-    min: 3
-    max: 6
-    default: 5
-  discovery:
-    mode: "trusted_first"
-    max_results_per_query: 8
-    preferred_domains:
-      - "wikipedia.org"
-      - "docs."
-      - "github.com"
-      - "openai.com"
-      - "microsoft.com"
-      - "google.com"
-  targeting:
-    entity_source: "topic_first_script_refine"
-    max_targets: 8
-    min_token_len: 3
-  fallbacks:
-    enable_image_search: true
-    max_capture_attempts_per_target: 6
-    image_search_max_results: 6
-    official_url_map:
-      claude code:
-        - "https://www.anthropic.com/claude-code"
-        - "https://docs.anthropic.com/"
-      codex:
-        - "https://openai.com/"
-        - "https://platform.openai.com/docs"
-      gemini cli:
-        - "https://ai.google.dev/"
-        - "https://deepmind.google/technologies/gemini/"
-  browser:
-    backend: "playwright_python"
-    headless: true
-    nav_timeout_ms: 15000
-  overlay:
-    style: "card_top"
-    width_ratio: 0.78
-    y_px: 140
-    crossfade_sec: 0.2
-    min_show_sec: 2.0
-    max_show_sec: 8.0
-  quality:
-    gold_coverage_min: 0.80

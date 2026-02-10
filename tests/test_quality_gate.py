@@ -119,3 +119,22 @@ def test_assess_output_quality_uses_effective_target_count_denominator():
     )
     assert result["quality_verdict"] == "needs_work"
     assert result["screenshot_coverage_ratio"] == 0.667
+
+
+def test_assess_output_quality_allows_small_dialogue_word_overrun():
+    # 79 words per line => 158 words total (8 over the dialogue target of 150).
+    line = " ".join(["word"] * 79)
+    script = f"A: {line}\nB: {line}"
+    captions = [{"word": "w"}] * 158
+    result = _assess_output_quality(
+        script_text=script,
+        style="dialogue",
+        duration_seconds=52.0,
+        min_duration=45,
+        max_duration=60,
+        word_captions=captions,
+        min_word_target=120,
+        max_word_target=150,
+    )
+    assert result["quality_verdict"] == "gold"
+    assert result["quality_failures"] == []

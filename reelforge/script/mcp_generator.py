@@ -13,7 +13,7 @@ logger = logging.getLogger(__name__)
 
 class MCPScriptGenerator:
     """
-    Script generator using MCP prompt with direct Gemini SDK.
+    Script generator using MCP prompt with OpenAI SDK.
 
     Generates dialogue scripts with embedded [SHOW:S#] markers for screenshot placement.
     """
@@ -28,13 +28,13 @@ class MCPScriptGenerator:
         self.config = config
         self.script_config = config.get("script", {})
 
-        # Gemini configuration
-        self.gemini_model = self.script_config.get("model", "gemini-2.5-pro")
+        # Model configuration
+        self.openai_model = self.script_config.get("model", "gpt-4o-mini")
         self.temperature = self.script_config.get("temperature", 0.7)
-        self.max_tokens = self.script_config.get("max_tokens", 1000)
+        self.max_tokens = self.script_config.get("max_tokens", 1500)
 
         # Compatibility with orchestrator interface
-        self.model = self.gemini_model
+        self.model = self.openai_model
         self.models = [self.model] + self.script_config.get("fallback_models", [])
 
     def generate(
@@ -43,7 +43,7 @@ class MCPScriptGenerator:
         details: Optional[str] = None,
         style: str = "dialogue",
         websites: Optional[str] = None,
-        length: str = "45s",
+        length: str = "60s",
         profanity: str = "none",
         model: Optional[str] = None,
     ) -> ScriptWithMarkers:
@@ -63,13 +63,13 @@ class MCPScriptGenerator:
             ScriptWithMarkers with dialogue, keyword map, and marker positions
 
         Raises:
-            RuntimeError: If Gemini API fails
+            RuntimeError: If OpenAI API fails
         """
         if style != "dialogue":
             logger.warning("MCP generator only supports dialogue style, got: %s", style)
             # Continue with dialogue mode anyway
 
-        logger.info("Generating script via direct Gemini with MCP prompt")
+        logger.info("Generating script via direct OpenAI with MCP prompt")
         return self._generate(topic, details, websites, length, profanity, model)
 
     def _generate(
@@ -82,7 +82,7 @@ class MCPScriptGenerator:
         model: Optional[str] = None,
     ) -> ScriptWithMarkers:
         """
-        Use direct Gemini SDK with embedded MCP prompt.
+        Use OpenAI SDK with embedded MCP prompt.
 
         Args:
             topic: Main topic
@@ -96,67 +96,90 @@ class MCPScriptGenerator:
             Parsed ScriptWithMarkers
 
         Raises:
-            RuntimeError: If Gemini API fails
+            RuntimeError: If OpenAI API fails
         """
         try:
-            from google import genai
-            from google.genai import types
+            from openai import OpenAI
         except ImportError as exc:
             raise RuntimeError(
-                "google-genai not installed. Install: pip install google-genai"
+                "openai not installed. Install: pip install openai"
             ) from exc
 
         # Get API key
-        api_key = self.config.get("gemini_api_key")
+        api_key = self.config.get("openai_api_key") or self.config.get("gemini_api_key")
         if not api_key:
             raise RuntimeError(
-                "Gemini API key not found. Set in config.yaml or GEMINI_API_KEY env var"
+                "OpenAI API key not found. Set in config.yaml or OPENAI_API_KEY env var"
             )
 
-        # Build prompt
+        # Build prompt with hook library
+        import random
+        from reelforge.script.hooks import get_random_hooks, get_random_ctas
+
+        # Select random hook category and generate examples
+        hook_category = random.choice(["curiosity_gap", "negative_hook", "bold_claim", "controversy"])
+        hook_examples = get_random_hooks(hook_category, 3)
+        hook_examples_text = "\n".join(f"- {h}" for h in hook_examples)
+
+        # Generate CTA examples
+        cta_examples = get_random_ctas("comment_bait", 2)
+        cta_examples_text = "\n".join(f"- {c}" for c in cta_examples)
+
         websites_instruction = ""
         if websites:
             websites_instruction = f"REQUIRED: Must mention and show these specific websites/tools: {websites}"
 
-        prompt_text = MCP_DIALOGUE_PROMPT.format(
+        # Use upgraded prompt with hook library
+        from reelforge.script.templates.prompts import MCP_DIALOGUE_PROMPT_V2
+
+        prompt_text = MCP_DIALOGUE_PROMPT_V2.format(
             length=length,
             topic=topic,
             websites_instruction=websites_instruction,
             profanity=profanity,
+            hook_examples=hook_examples_text,
+            cta_examples=cta_examples_text,
         )
 
         if details:
             prompt_text += f"\n\nAdditional context:\n{details}"
 
-        # Call Gemini (use provided model or default)
-        model_to_use = model or self.gemini_model
-        logger.debug("Calling Gemini API with model: %s", model_to_use)
+        # Call OpenAI (use provided model or default)
+        model_to_use = model or self.openai_model
+        logger.debug("Calling OpenAI API with model: %s", model_to_use)
 
-        client = genai.Client(api_key=api_key)
+        client = OpenAI(api_key=api_key)
 
-        response = client.models.generate_content(
+        response = client.chat.completions.create(
             model=model_to_use,
-            contents=prompt_text,
-            config=types.GenerateContentConfig(
-                temperature=self.temperature,
-                max_output_tokens=self.max_tokens,
-            ),
+            messages=[
+                {"role": "system", "content": "You write viral short-form dialogue scripts with strict formatting."},
+                {"role": "user", "content": prompt_text},
+            ],
+            temperature=self.temperature,
+            max_tokens=self.max_tokens,
         )
 
-        if not response or not response.text:
+        choices = getattr(response, "choices", None) or []
+        content = ""
+        if choices:
+            message = getattr(choices[0], "message", None)
+            content = (getattr(message, "content", None) or "").strip()
+
+        if not response or not content:
             raise RuntimeError(
-                "Gemini returned empty response. This may be due to:\n"
+                "OpenAI returned empty response. This may be due to:\n"
                 "1. API rate limiting\n"
                 "2. Prompt safety filters\n"
                 "3. Network issues\n"
                 "Try again or check your API quota."
             )
 
-        script_text = response.text.strip()
+        script_text = content
 
         if len(script_text) < 50:
             raise RuntimeError(
-                f"Gemini returned very short response ({len(script_text)} chars): {script_text[:100]}\n"
+                f"OpenAI returned very short response ({len(script_text)} chars): {script_text[:100]}\n"
                 "This usually indicates a prompt/API issue."
             )
 
@@ -167,7 +190,7 @@ class MCPScriptGenerator:
 
         # Parse output
         script_with_markers = parse_mcp_output(script_text)
-        logger.info("Gemini generated script with %d markers", len(script_with_markers.keyword_map))
+        logger.info("OpenAI generated script with %d markers", len(script_with_markers.keyword_map))
 
         return script_with_markers
 
@@ -218,7 +241,7 @@ class MCPScriptGenerator:
         model: Optional[str] = None,
     ) -> str:
         """
-        Expand short script while preserving markers.
+        Expand short script by asking LLM to add lines to the existing script.
 
         Args:
             topic: Topic/subject
@@ -232,22 +255,64 @@ class MCPScriptGenerator:
         Returns:
             Expanded script text
         """
-        # For MCP mode, we regenerate with stricter word count constraints
-        # This preserves markers better than trying to expand existing text
+        logger.info("Expanding short script by adding lines to existing content")
 
-        logger.info("Expanding short script by regenerating with stricter constraints")
-
-        # Add word count constraint to details
-        constraint = f"CRITICAL: Script must be between {min_words} and {max_words} words. Previous attempt was too short."
-        enhanced_details = f"{details or ''}\n{constraint}".strip()
-
-        # Regenerate (this will return ScriptWithMarkers)
-        result = self.generate(
-            topic=topic,
-            details=enhanced_details,
-            style=style,
-            model=model,
+        current_words = len(short_script.split())
+        expand_prompt = (
+            f"You are expanding a short dialogue script about: {topic}\n\n"
+            f"CURRENT SCRIPT ({current_words} words — too short):\n"
+            f"{short_script}\n\n"
+            f"REQUIREMENTS:\n"
+            f"- ADD 4-6 more A/B exchanges to make the script longer\n"
+            f"- Total word count MUST be between {min_words} and {max_words} words\n"
+            f"- Preserve ALL existing lines exactly as they are\n"
+            f"- Preserve ALL [SHOW:S#] markers exactly\n"
+            f"- Maintain strict alternating A/B format\n"
+            f"- Keep the same topic, tone, and character dynamics\n"
+            f"- Insert new lines in natural positions between existing lines\n"
+            f"- Do NOT remove or rewrite existing lines\n\n"
+            f"Output ONLY the complete expanded dialogue script (A: and B: lines).\n"
+            f"If the original has a keyword line (S1=..., S2=...), include it unchanged at the end."
         )
 
-        # Return dialogue text (markers are preserved in the ScriptWithMarkers object)
-        return result.dialogue_text
+        try:
+            from openai import OpenAI
+        except ImportError as exc:
+            raise RuntimeError("openai not installed. Install: pip install openai") from exc
+
+        api_key = self.config.get("openai_api_key") or self.config.get("gemini_api_key")
+        if not api_key:
+            raise RuntimeError("OpenAI API key not found.")
+
+        model_to_use = model or self.openai_model
+        client = OpenAI(api_key=api_key)
+
+        response = client.chat.completions.create(
+            model=model_to_use,
+            messages=[
+                {"role": "system", "content": "You expand dialogue scripts by adding new lines while preserving all existing content."},
+                {"role": "user", "content": expand_prompt},
+            ],
+            temperature=0.7,
+            max_tokens=self.max_tokens,
+        )
+
+        choices = getattr(response, "choices", None) or []
+        content = ""
+        if choices:
+            message = getattr(choices[0], "message", None)
+            content = (getattr(message, "content", None) or "").strip()
+
+        if not content or len(content) < 50:
+            logger.warning("Expansion returned short/empty response, falling back to regeneration")
+            constraint = f"CRITICAL: Script must be between {min_words} and {max_words} words."
+            enhanced_details = f"{details or ''}\n{constraint}".strip()
+            result = self.generate(topic=topic, details=enhanced_details, style=style, model=model)
+            return result.dialogue_text
+
+        # Remove markdown code blocks if present
+        if content.startswith("```"):
+            lines = content.split('\n')
+            content = '\n'.join(lines[1:-1]) if len(lines) > 2 else content
+
+        return content

@@ -47,7 +47,7 @@ def setup_logging(mode: str = "dev", logs_dir: str = "logs") -> Tuple[logging.Lo
 
     if normalized == "dev":
         console_handler = logging.StreamHandler()
-        console_handler.setLevel(logging.WARNING)
+        console_handler.setLevel(logging.ERROR)
         console_handler.setFormatter(formatter)
         logger.addHandler(console_handler)
 

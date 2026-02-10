@@ -173,38 +173,9 @@ def launch_interactive_wizard(config: Dict[str, Any]) -> Optional[Dict[str, Any]
 
     mode_choice = questionary.select("Run mode", choices=["dev", "prod"], default=config.get("app", {}).get("mode", "dev")).ask()
 
-    research_cfg = config.get("research", {})
-    research_enabled_default = bool(research_cfg.get("enabled", False))
-
-    # Check if MCP mode is enabled
-    script_cfg = config.get("script", {})
-    use_mcp = script_cfg.get("use_mcp_generator", False)
-
-    if use_mcp:
-        # MCP mode uses media-harvest automatically, don't confuse with legacy research
-        auto_screenshots = False
-    else:
-        auto_screenshots = questionary.confirm(
-            "Enable legacy screenshot research? (Note: MCP mode uses media-harvest automatically)",
-            default=research_enabled_default,
-        ).ask()
-
-    screenshot_count = None
-    seed_urls = []
-    if auto_screenshots:
-        count_value = questionary.text(
-            "Screenshot count override (press Enter to use auto)",
-            default="",
-            validate=lambda text: (not text.strip()) or text.strip().isdigit() or "Enter a number or leave blank",
-        ).ask()
-        if count_value and count_value.strip():
-            screenshot_count = int(count_value.strip())
-
-        seed_input = questionary.text(
-            "Optional trusted seed URLs (comma-separated)",
-            default="",
-        ).ask() or ""
-        seed_urls = [u.strip() for u in seed_input.split(",") if u.strip()]
+    # Inform user about screenshot folder convention
+    screenshots_dir = config.get("screenshots", {}).get("directory", "screenshots")
+    console.print(f"\n[dim]Tip: Place screenshots (S1.png, S2.png, etc.) in '{screenshots_dir}/' to add visuals to your reel.[/dim]\n")
 
     run_name = questionary.text("Optional run name (used in output folder suffix)", default="").ask() or None
 
@@ -223,10 +194,7 @@ def launch_interactive_wizard(config: Dict[str, Any]) -> Optional[Dict[str, Any]
     if style == "dialogue":
         summary.add_row("Character B", secondary_character or "None")
     summary.add_row("Mode", mode_choice)
-    summary.add_row("Auto Screenshots", "Yes" if auto_screenshots else "No")
-    if auto_screenshots:
-        summary.add_row("Screenshot Count", str(screenshot_count) if screenshot_count is not None else "Auto")
-        summary.add_row("Seed URLs", str(len(seed_urls)))
+    summary.add_row("Screenshots", f"From '{screenshots_dir}/' folder")
     summary.add_row("Run Name", run_name or "-")
     console.print(summary)
 
@@ -245,8 +213,5 @@ def launch_interactive_wizard(config: Dict[str, Any]) -> Optional[Dict[str, Any]
         "secondary_character": secondary_character,
         "mode": mode_choice,
         "run_name": run_name,
-        "auto_screenshots": auto_screenshots,
-        "screenshot_count": screenshot_count,
-        "seed_urls": seed_urls,
         "custom_script_path": custom_script_path,
     }
