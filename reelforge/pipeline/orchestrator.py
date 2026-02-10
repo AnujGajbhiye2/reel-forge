@@ -161,7 +161,19 @@ def _run_generate_pipeline(
         generator = ScriptGenerator(cfg)
         logger.info("Using legacy script generator")
 
-    engine = TTSEngine(cfg)
+    # Initialize TTS engine (Kokoro or EdgeTTS)
+    tts_provider = cfg.get("tts", {}).get("provider", "edge")
+    if tts_provider == "kokoro":
+        try:
+            from reelforge.audio.kokoro_engine import KokoroTTSEngine
+            engine = KokoroTTSEngine(cfg)
+            logger.info("Using Kokoro TTS engine")
+        except Exception as e:
+            logger.warning(f"Kokoro TTS not available, falling back to EdgeTTS: {e}")
+            engine = TTSEngine(cfg)
+    else:
+        engine = TTSEngine(cfg)
+
     caption_gen = CaptionGenerator(cfg)
     compositor = VideoCompositor(cfg)
     research_cfg = cfg.get("research", {})
@@ -482,6 +494,22 @@ def _run_generate_pipeline(
                             raise RuntimeError("Could not generate strictly alternating dialogue after all attempts.")
                         continue
 
+                    # Check hook quality (first line should be short and punchy)
+                    first_line = script_text.split('\n')[0] if '\n' in script_text else script_text
+                    # Remove speaker prefix (A:, B:, [A], etc.)
+                    first_line_clean = first_line.split(':', 1)[-1].strip() if ':' in first_line else first_line
+                    first_line_words = len(first_line_clean.split())
+                    if first_line_words > 10:
+                        logger.warning("Hook too long (%d words) on attempt %d", first_line_words, attempt)
+                        last_failure_reason = f"Hook is too long ({first_line_words} words, max 10)."
+                        enhanced_details = (
+                            f"{details} {constraints} "
+                            "CRITICAL: First line (hook) must be UNDER 10 WORDS. "
+                            "Use a short, punchy hook to grab attention in first 3 seconds."
+                        ).strip()
+                        if attempt < attempts_allowed:
+                            continue
+
                     voice_mapping = None
                     if primary_voice:
                         chars = list(parsed_dialogue.keys())
@@ -729,6 +757,34 @@ def _run_generate_pipeline(
         )
         if screenshot_failures:
             logger.warning("Screenshot failures: %s", " | ".join(screenshot_failures))
+
+    # Audio mixing: Add background music and sound effects
+    if cfg.get("audio", {}).get("background_music", False):
+        try:
+            from reelforge.audio.mixer import AudioMixer
+            mixer = AudioMixer(cfg)
+
+            # Auto-generate SFX cues from screenshot data
+            sfx_cues = []
+            if screenshots_data and cfg.get("audio", {}).get("auto_sfx", True):
+                for shot in screenshots_data:
+                    # Add pop sound at screenshot appearance
+                    sfx_cues.append({"type": "pop", "time_ms": int(shot["start"] * 1000)})
+
+            # Mix audio with background music and SFX
+            mixed_path = paths["run_dir"] / "audio_mixed.mp3"
+            if reporter:
+                with reporter.stage("Mixing audio"):
+                    mixer.mix(str(paths["audio"]), str(mixed_path), sfx_cues=sfx_cues, add_music=True)
+            else:
+                mixer.mix(str(paths["audio"]), str(mixed_path), sfx_cues=sfx_cues, add_music=True)
+
+            # Replace original audio path with mixed version
+            paths["audio"] = mixed_path
+            logger.info("Audio mixing complete: background music + %d SFX cues", len(sfx_cues))
+
+        except Exception as e:
+            logger.warning("Audio mixing failed, using original audio: %s", e)
 
     if progress_enabled:
         last_progress = {"value": -1}

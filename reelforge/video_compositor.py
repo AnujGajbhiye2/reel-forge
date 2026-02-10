@@ -107,22 +107,40 @@ class VideoCompositor:
         Returns:
             MoviePy VideoClip object
         """
-        bg = VideoFileClip(background_path)
-        framing_cfg = self.config.get("video", {}).get("framing", {})
-        framing_mode = framing_cfg.get("mode", "fit_blur")
+        video_cfg = self.config.get("video", {})
 
-        if framing_mode == "fit_blur":
-            bg = self._create_fit_blur_background(bg, duration)
+        # Check if transitions are enabled
+        use_transitions = video_cfg.get("background_transitions", False)
+        if use_transitions:
+            transition_duration = float(video_cfg.get("transition_duration", 0.3))
+            bg = self.create_background_with_transitions(
+                [background_path],
+                duration,
+                transition_duration
+            )
         else:
-            bg = self._create_center_crop_background(bg)
+            # Original background processing
+            bg = VideoFileClip(background_path)
+            framing_cfg = video_cfg.get("framing", {})
+            framing_mode = framing_cfg.get("mode", "fit_blur")
 
-        # Loop if necessary
-        if bg.duration < duration:
-            loops_needed = int(duration / bg.duration) + 1
-            bg = concatenate_videoclips([bg] * loops_needed)
+            if framing_mode == "fit_blur":
+                bg = self._create_fit_blur_background(bg, duration)
+            else:
+                bg = self._create_center_crop_background(bg)
 
-        # Trim to exact duration
-        bg = bg.subclipped(0, duration)
+            # Loop if necessary
+            if bg.duration < duration:
+                loops_needed = int(duration / bg.duration) + 1
+                bg = concatenate_videoclips([bg] * loops_needed)
+
+            # Trim to exact duration
+            bg = bg.subclipped(0, duration)
+
+        # Apply Ken Burns effect if enabled
+        if video_cfg.get("ken_burns", False):
+            zoom_ratio = float(video_cfg.get("ken_burns_zoom_ratio", 0.04))
+            bg = self.apply_ken_burns(bg, zoom_ratio)
 
         return bg
 
@@ -152,6 +170,98 @@ class VideoCompositor:
         dim_layer = ColorClip(size=(target_w, target_h), color=(0, 0, 0)).with_opacity(dim_opacity).with_duration(duration)
 
         return CompositeVideoClip([fill, dim_layer, fg], size=self.resolution).with_duration(duration)
+
+    def create_background_with_transitions(
+        self,
+        clip_paths: List[str],
+        total_duration: float,
+        transition_duration: float = 0.3
+    ):
+        """
+        Create background with crossfade transitions between clips.
+
+        Args:
+            clip_paths: List of video file paths
+            total_duration: Total duration needed
+            transition_duration: Duration of crossfade in seconds
+
+        Returns:
+            Composite background clip
+        """
+        if not clip_paths:
+            raise ValueError("No clip paths provided")
+
+        # Load all clips
+        clips = []
+        for path in clip_paths:
+            clip = VideoFileClip(path)
+            # Resize to target resolution
+            clip = clip.resized(self.resolution)
+            clips.append(clip)
+
+        # If single clip, just loop it
+        if len(clips) == 1:
+            bg = clips[0]
+            if bg.duration < total_duration:
+                loops = int(total_duration / bg.duration) + 1
+                bg = concatenate_videoclips([bg] * loops)
+            return bg.subclipped(0, total_duration)
+
+        # Multiple clips: create crossfades
+        result_clips = []
+        for i, clip in enumerate(clips):
+            if i < len(clips) - 1:
+                # Apply crossfade to next clip
+                clip = clip.crossfadeout(transition_duration)
+            result_clips.append(clip)
+
+        # Concatenate with overlap
+        final = concatenate_videoclips(result_clips, method="compose", padding=-transition_duration)
+
+        # Loop if needed
+        if final.duration < total_duration:
+            loops = int(total_duration / final.duration) + 1
+            final = concatenate_videoclips([final] * loops)
+
+        return final.subclipped(0, total_duration)
+
+    def apply_ken_burns(self, clip, zoom_ratio: float = 0.04):
+        """
+        Apply Ken Burns slow zoom effect to a clip.
+
+        Args:
+            clip: Video clip
+            zoom_ratio: Amount to zoom (e.g., 0.04 = 4% zoom over duration)
+
+        Returns:
+            Clip with zoom effect applied
+        """
+        w, h = clip.size
+        duration = clip.duration
+
+        def zoom_effect(get_frame, t):
+            """Progressively zoom in over time"""
+            frame = get_frame(t)
+            # Calculate zoom factor (1.0 to 1.0 + zoom_ratio)
+            progress = t / duration if duration > 0 else 0
+            zoom = 1.0 + (zoom_ratio * progress)
+
+            # Calculate crop box for zoom
+            new_w = int(w / zoom)
+            new_h = int(h / zoom)
+            x1 = (w - new_w) // 2
+            y1 = (h - new_h) // 2
+
+            # Crop and resize
+            from PIL import Image
+            img = Image.fromarray(frame)
+            cropped = img.crop((x1, y1, x1 + new_w, y1 + new_h))
+            resized = cropped.resize((w, h), Image.LANCZOS)
+
+            import numpy as np
+            return np.array(resized)
+
+        return clip.transform(lambda gf, t: zoom_effect(gf, t))
 
     @staticmethod
     def _compute_center_crop_box(src_w: int, src_h: int, target_w: int, target_h: int):
@@ -202,6 +312,12 @@ class VideoCompositor:
         Returns:
             List of TextClip objects
         """
+        # Check if Pillow karaoke renderer is enabled
+        if self.config.get("captions", {}).get("renderer") == "pillow":
+            from reelforge.captions.pillow_renderer import build_karaoke_clips
+            return build_karaoke_clips(captions, font_path, self.config, self.resolution)
+
+        # Fallback to existing TextClip logic
         clips = []
 
         safe_zone = self.config.get("captions", {}).get("safe_zone", {})
@@ -345,7 +461,8 @@ class VideoCompositor:
         character_a_path: str,
         character_b_path: str,
         speaker_timeline: List[Dict[str, Any]],
-        duration: float
+        duration: float,
+        audio_path: Optional[str] = None
     ) -> List[ImageClip]:
         """
         Create left/right character overlays with active-speaker emphasis.
@@ -357,6 +474,35 @@ class VideoCompositor:
         active_opacity = float(char_cfg.get("active_opacity", 1.0))
         inactive_opacity = float(char_cfg.get("inactive_opacity", 0.08))
         inactive_mode = str(char_cfg.get("inactive_mode", "hidden")).strip().lower()
+
+        # Check if character paths are directories (multi-pose) or files
+        from pathlib import Path
+        char_a_is_dir = Path(character_a_path).is_dir()
+        char_b_is_dir = Path(character_b_path).is_dir()
+
+        # Scan for available poses if directories
+        char_a_poses = []
+        char_b_poses = []
+        if char_a_is_dir:
+            from reelforge.animation.expression_mapper import scan_character_poses
+            char_a_poses = scan_character_poses(Path(character_a_path))
+        if char_b_is_dir:
+            from reelforge.animation.expression_mapper import scan_character_poses
+            char_b_poses = scan_character_poses(Path(character_b_path))
+
+        # Initialize animator if audio path provided
+        animator = None
+        rate = None
+        audio_data = None
+        if audio_path and self.config.get("character", {}).get("animation", "bounce") != "none":
+            try:
+                from reelforge.animation.character_animator import CharacterAnimator
+                animator = CharacterAnimator(self.config)
+                rate, audio_data = animator.load_audio_amplitude(audio_path)
+            except Exception as e:
+                import logging
+                logging.getLogger(__name__).warning(f"Failed to initialize animator: {e}")
+                animator = None
 
         speakers = []
         for segment in speaker_timeline:
@@ -376,17 +522,68 @@ class VideoCompositor:
                 continue
 
             active_speaker = segment.get("speaker")
+            segment_text = segment.get("text", "")
 
-            left = ImageClip(character_a_path).with_start(start).with_duration(clip_duration).resized(height=420)
-            left = left.with_position((int(self.resolution[0] * left_x_ratio), self.resolution[1] - bottom_y))
+            # Calculate base positions
+            left_x = int(self.resolution[0] * left_x_ratio)
+            left_y = self.resolution[1] - bottom_y
+            right_x = int(self.resolution[0] * right_x_ratio)
+            right_y = self.resolution[1] - bottom_y
+
+            # Determine character A pose based on dialogue
+            char_a_file = character_a_path
+            if char_a_is_dir and char_a_poses:
+                from reelforge.animation.expression_mapper import get_expression, get_character_pose_path
+                expression = get_expression(segment_text, primary_speaker or "A", char_a_poses)
+                pose_path = get_character_pose_path(Path(character_a_path), expression, char_a_poses)
+                if pose_path:
+                    char_a_file = str(pose_path)
+
+            # Create left character clip
+            left = ImageClip(char_a_file).with_start(start).with_duration(clip_duration).resized(height=420)
+
+            # Apply animation if animator available
+            if animator and rate is not None and audio_data is not None:
+                # Create position function that accounts for segment start time
+                def left_pos_func(t, seg_start=start, base_x=left_x, base_y=left_y):
+                    actual_time = seg_start + t
+                    amplitude = animator.get_amplitude(actual_time, rate, audio_data)
+                    bounce = int(amplitude * animator.bounce_pixels)
+                    return (base_x, base_y - bounce)
+                left = left.set_position(left_pos_func)
+            else:
+                left = left.with_position((left_x, left_y))
+
             left_active = active_speaker == primary_speaker
             if left_active:
                 overlays.append(self._set_opacity(left, active_opacity))
             elif inactive_mode != "hidden":
                 overlays.append(self._set_opacity(left, inactive_opacity))
 
-            right = ImageClip(character_b_path).with_start(start).with_duration(clip_duration).resized(height=420)
-            right = right.with_position((int(self.resolution[0] * right_x_ratio), self.resolution[1] - bottom_y))
+            # Determine character B pose based on dialogue
+            char_b_file = character_b_path
+            if char_b_is_dir and char_b_poses:
+                from reelforge.animation.expression_mapper import get_expression, get_character_pose_path
+                expression = get_expression(segment_text, secondary_speaker or "B", char_b_poses)
+                pose_path = get_character_pose_path(Path(character_b_path), expression, char_b_poses)
+                if pose_path:
+                    char_b_file = str(pose_path)
+
+            # Create right character clip
+            right = ImageClip(char_b_file).with_start(start).with_duration(clip_duration).resized(height=420)
+
+            # Apply animation if animator available
+            if animator and rate is not None and audio_data is not None:
+                # Create position function that accounts for segment start time
+                def right_pos_func(t, seg_start=start, base_x=right_x, base_y=right_y):
+                    actual_time = seg_start + t
+                    amplitude = animator.get_amplitude(actual_time, rate, audio_data)
+                    bounce = int(amplitude * animator.bounce_pixels)
+                    return (base_x, base_y - bounce)
+                right = right.set_position(right_pos_func)
+            else:
+                right = right.with_position((right_x, right_y))
+
             right_active = active_speaker == secondary_speaker or (secondary_speaker is None and active_speaker != primary_speaker)
             if right_active:
                 overlays.append(self._set_opacity(right, active_opacity))
@@ -518,7 +715,8 @@ class VideoCompositor:
                     character_path,
                     secondary_character_path,
                     speaker_timeline,
-                    duration
+                    duration,
+                    audio_path=audio_path
                 )
                 all_clips = [bg_clip] + character_clips + caption_clips
             elif character_path and os.path.exists(character_path):

@@ -113,16 +113,33 @@ class MCPScriptGenerator:
                 "Gemini API key not found. Set in config.yaml or GEMINI_API_KEY env var"
             )
 
-        # Build prompt
+        # Build prompt with hook library
+        import random
+        from reelforge.script.hooks import get_random_hooks, get_random_ctas
+
+        # Select random hook category and generate examples
+        hook_category = random.choice(["curiosity_gap", "negative_hook", "bold_claim", "controversy"])
+        hook_examples = get_random_hooks(hook_category, 3)
+        hook_examples_text = "\n".join(f"- {h}" for h in hook_examples)
+
+        # Generate CTA examples
+        cta_examples = get_random_ctas("comment_bait", 2)
+        cta_examples_text = "\n".join(f"- {c}" for c in cta_examples)
+
         websites_instruction = ""
         if websites:
             websites_instruction = f"REQUIRED: Must mention and show these specific websites/tools: {websites}"
 
-        prompt_text = MCP_DIALOGUE_PROMPT.format(
+        # Use upgraded prompt with hook library
+        from reelforge.script.templates.prompts import MCP_DIALOGUE_PROMPT_V2
+
+        prompt_text = MCP_DIALOGUE_PROMPT_V2.format(
             length=length,
             topic=topic,
             websites_instruction=websites_instruction,
             profanity=profanity,
+            hook_examples=hook_examples_text,
+            cta_examples=cta_examples_text,
         )
 
         if details:
