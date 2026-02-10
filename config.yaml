@@ -142,6 +142,13 @@ output:
   audio_codec: "aac"
   bitrate: "8000k"
 
+# Render safety guardrails
+render:
+  threads: 2
+  preset_dev: "veryfast"
+  preset_prod: "medium"
+  timeout_seconds: 900
+
 # Video Settings
 video:
   resolution:
@@ -187,78 +194,10 @@ integrations:
       max_attempts: 3
       backoff_seconds: 2.0
 
-# Media Harvest Integration
-media_harvest:
-  enabled: true  # Master switch (auto-enabled when use_mcp=true)
-  project_path: "/home/anuj/projects/screen-scraper"
-
-  # Harvest Configuration
-  harvest_config:
-    mode: "safe"  # safe, open, strict (safe = fallback to web images when screenshots fail)
-    transform_preset: "vertical_9_16"  # Match reel dimensions (1080×1920)
-    timeout_seconds: 30  # Use partial results on timeout
-    retry_attempts: 3
-    enable_cache: true
-    cache_dir: ".cache/media-harvest"
-    assets_per_entity: 1
-
-  # Screenshot Timing
-  screenshot_duration_seconds: 4.0
+# User-provided screenshots
+# Place files named S1.png, S2.jpg, etc. in the screenshots/ directory
+screenshots:
+  directory: "screenshots"
+  duration_seconds: 4.0
   min_duration_seconds: 2.0
   max_duration_seconds: 6.0
-
-# Free imagery strategy controls
-imagery:
-  strategy: "official_then_commons"
-  min_quality_score: 0.7
-  fallback_sources:
-    - "wikimedia"
-
-# Optional web screenshot research and timed overlay insertion (LEGACY fallback)
-research:
-  enabled: false
-  count:
-    min: 3
-    max: 6
-    default: 5
-  discovery:
-    mode: "trusted_first"
-    max_results_per_query: 8
-    preferred_domains:
-      - "wikipedia.org"
-      - "docs."
-      - "github.com"
-      - "openai.com"
-      - "microsoft.com"
-      - "google.com"
-  targeting:
-    entity_source: "topic_first_script_refine"
-    max_targets: 8
-    min_token_len: 3
-  fallbacks:
-    enable_image_search: true
-    max_capture_attempts_per_target: 6
-    image_search_max_results: 6
-    official_url_map:
-      claude code:
-        - "https://www.anthropic.com/claude-code"
-        - "https://docs.anthropic.com/"
-      codex:
-        - "https://openai.com/"
-        - "https://platform.openai.com/docs"
-      gemini cli:
-        - "https://ai.google.dev/"
-        - "https://deepmind.google/technologies/gemini/"
-  browser:
-    backend: "playwright_python"
-    headless: true
-    nav_timeout_ms: 15000
-  overlay:
-    style: "card_top"
-    width_ratio: 0.78
-    y_px: 140
-    crossfade_sec: 0.2
-    min_show_sec: 2.0
-    max_show_sec: 8.0
-  quality:
-    gold_coverage_min: 0.80

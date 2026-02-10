@@ -31,7 +31,7 @@ class MCPScriptGenerator:
         # Model configuration
         self.openai_model = self.script_config.get("model", "gpt-4o-mini")
         self.temperature = self.script_config.get("temperature", 0.7)
-        self.max_tokens = self.script_config.get("max_tokens", 1000)
+        self.max_tokens = self.script_config.get("max_tokens", 1500)
 
         # Compatibility with orchestrator interface
         self.model = self.openai_model
@@ -43,7 +43,7 @@ class MCPScriptGenerator:
         details: Optional[str] = None,
         style: str = "dialogue",
         websites: Optional[str] = None,
-        length: str = "45s",
+        length: str = "60s",
         profanity: str = "none",
         model: Optional[str] = None,
     ) -> ScriptWithMarkers:
@@ -241,7 +241,7 @@ class MCPScriptGenerator:
         model: Optional[str] = None,
     ) -> str:
         """
-        Expand short script while preserving markers.
+        Expand short script by asking LLM to add lines to the existing script.
 
         Args:
             topic: Topic/subject
@@ -255,22 +255,64 @@ class MCPScriptGenerator:
         Returns:
             Expanded script text
         """
-        # For MCP mode, we regenerate with stricter word count constraints
-        # This preserves markers better than trying to expand existing text
+        logger.info("Expanding short script by adding lines to existing content")
 
-        logger.info("Expanding short script by regenerating with stricter constraints")
-
-        # Add word count constraint to details
-        constraint = f"CRITICAL: Script must be between {min_words} and {max_words} words. Previous attempt was too short."
-        enhanced_details = f"{details or ''}\n{constraint}".strip()
-
-        # Regenerate (this will return ScriptWithMarkers)
-        result = self.generate(
-            topic=topic,
-            details=enhanced_details,
-            style=style,
-            model=model,
+        current_words = len(short_script.split())
+        expand_prompt = (
+            f"You are expanding a short dialogue script about: {topic}\n\n"
+            f"CURRENT SCRIPT ({current_words} words — too short):\n"
+            f"{short_script}\n\n"
+            f"REQUIREMENTS:\n"
+            f"- ADD 4-6 more A/B exchanges to make the script longer\n"
+            f"- Total word count MUST be between {min_words} and {max_words} words\n"
+            f"- Preserve ALL existing lines exactly as they are\n"
+            f"- Preserve ALL [SHOW:S#] markers exactly\n"
+            f"- Maintain strict alternating A/B format\n"
+            f"- Keep the same topic, tone, and character dynamics\n"
+            f"- Insert new lines in natural positions between existing lines\n"
+            f"- Do NOT remove or rewrite existing lines\n\n"
+            f"Output ONLY the complete expanded dialogue script (A: and B: lines).\n"
+            f"If the original has a keyword line (S1=..., S2=...), include it unchanged at the end."
         )
 
-        # Return dialogue text (markers are preserved in the ScriptWithMarkers object)
-        return result.dialogue_text
+        try:
+            from openai import OpenAI
+        except ImportError as exc:
+            raise RuntimeError("openai not installed. Install: pip install openai") from exc
+
+        api_key = self.config.get("openai_api_key") or self.config.get("gemini_api_key")
+        if not api_key:
+            raise RuntimeError("OpenAI API key not found.")
+
+        model_to_use = model or self.openai_model
+        client = OpenAI(api_key=api_key)
+
+        response = client.chat.completions.create(
+            model=model_to_use,
+            messages=[
+                {"role": "system", "content": "You expand dialogue scripts by adding new lines while preserving all existing content."},
+                {"role": "user", "content": expand_prompt},
+            ],
+            temperature=0.7,
+            max_tokens=self.max_tokens,
+        )
+
+        choices = getattr(response, "choices", None) or []
+        content = ""
+        if choices:
+            message = getattr(choices[0], "message", None)
+            content = (getattr(message, "content", None) or "").strip()
+
+        if not content or len(content) < 50:
+            logger.warning("Expansion returned short/empty response, falling back to regeneration")
+            constraint = f"CRITICAL: Script must be between {min_words} and {max_words} words."
+            enhanced_details = f"{details or ''}\n{constraint}".strip()
+            result = self.generate(topic=topic, details=enhanced_details, style=style, model=model)
+            return result.dialogue_text
+
+        # Remove markdown code blocks if present
+        if content.startswith("```"):
+            lines = content.split('\n')
+            content = '\n'.join(lines[1:-1]) if len(lines) > 2 else content
+
+        return content

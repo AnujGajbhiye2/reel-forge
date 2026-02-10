@@ -24,10 +24,10 @@ class MarkerResolver:
             config: Configuration dictionary from config.yaml
         """
         self.config = config
-        self.media_harvest_config = config.get("media_harvest", {})
-        self.default_duration = self.media_harvest_config.get("screenshot_duration_seconds", 4.0)
-        self.min_duration = self.media_harvest_config.get("min_duration_seconds", 2.0)
-        self.max_duration = self.media_harvest_config.get("max_duration_seconds", 6.0)
+        screenshots_cfg = config.get("screenshots", config.get("media_harvest", {}))
+        self.default_duration = screenshots_cfg.get("duration_seconds", 4.0)
+        self.min_duration = screenshots_cfg.get("min_duration_seconds", 2.0)
+        self.max_duration = screenshots_cfg.get("max_duration_seconds", 6.0)
 
     def resolve_markers_to_timestamps(
         self,

@@ -8,11 +8,11 @@ Create a SHORT 60-second script for a faceless reel on the following topic:
 {topic}
 
 STRICT LENGTH REQUIREMENTS:
-- MAXIMUM 140 words total (this is CRITICAL - more than 140 words will NOT fit in 60 seconds)
-- MINIMUM 110 words total (shorter scripts sound incomplete and under 45 seconds)
+- MAXIMUM 160 words total (this is CRITICAL - more than 160 words will NOT fit in 60 seconds)
+- MINIMUM 130 words total (shorter scripts sound incomplete and under 45 seconds)
 - Count every word carefully
 - Each sentence should be 5-12 words MAX
-- Total: 10-15 sentences
+- Total: 12-18 sentences
 
 Requirements:
 - Write ONLY the narrator's dialogue
@@ -29,7 +29,7 @@ Requirements:
 Topic details:
 {details}
 
-Write the script now (BETWEEN 110 AND 140 WORDS):"""
+Write the script now (BETWEEN 130 AND 160 WORDS):"""
 
 DIALOGUE_PROMPT = """You are a viral social media content writer specializing in tech and AI topics.
 
@@ -37,13 +37,13 @@ Create a SHORT 60-second dialogue script for a faceless reel on the following to
 {topic}
 
 STRICT LENGTH REQUIREMENTS:
-- MAXIMUM 130 words total (this is CRITICAL - more than 130 words will NOT fit in 60 seconds)
-- MINIMUM 100 words total (shorter scripts often produce under-45-second reels)
+- MAXIMUM 160 words total (this is CRITICAL - more than 160 words will NOT fit in 60 seconds)
+- MINIMUM 130 words total (shorter scripts often produce under-45-second reels)
 - Count every word carefully
-- Target: 10-14 total lines
+- Target: 12-18 total lines
 - STRICT alternating format: A then B then A then B
-- Each A line should be 5-10 words
-- Each B line should be 10-16 words
+- Each A line should be 5-12 words
+- Each B line should be 10-18 words
 
 Requirements:
 - Two characters having a conversation
@@ -69,7 +69,7 @@ CRITICAL FORMATTING:
 Topic details:
 {details}
 
-Output the dialogue now (ONLY dialogue lines using A:/B:, BETWEEN 100 AND 130 WORDS):"""
+Output the dialogue now (ONLY dialogue lines using A:/B:, BETWEEN 130 AND 160 WORDS):"""
 
 MCP_DIALOGUE_PROMPT = """You are "ReelForge Writer": a short-form comedy scriptwriter for my automated ReelForge pipeline.
 
@@ -92,7 +92,7 @@ The topic/idea for the reel: {topic}
 
 Optional: specific websites/apps/repos/tools to show: {websites_instruction}
 
-Optional: length: {length}. If missing, assume 45s.
+Optional: length: {length}. If missing, assume 60s.
 
 Optional: profanity rules: {profanity}. If missing, assume no profanity.
 
@@ -136,7 +136,7 @@ Then only A: and B: lines
 
 No narration. Only A and B.
 
-Must fit target length (default 45s).
+Must fit target length (default 60s).
 
 Required structure:
 
@@ -242,7 +242,7 @@ Beat 1 - HOOK (0-3s):
 - Examples: {hook_examples}
 
 Beat 2 - BUILD (3-45s):
-- 2-4 exchanges building tension/curiosity
+- 3-5 exchanges building tension/curiosity
 - Include ONE surprising fact or counterintuitive insight
 - Insert [SHOW:S#] markers where visuals should appear (3-8 total)
 - Maintain fast pace, punchy exchanges
@@ -259,10 +259,11 @@ Beat 4 - CTA (52-60s):
 RULES
 
 Length:
-- 100-130 words total (CRITICAL - over 130 won't fit in 60 seconds)
-- Each A line: 5-10 words
-- Each B line: 10-16 words
+- 130-160 words total (CRITICAL - over 160 won't fit in 60 seconds)
+- Each A line: 5-12 words
+- Each B line: 10-18 words
 - Strict alternation: A then B then A then B
+- Target: 12-18 total lines
 
 Language:
 - Conversational, simple words
@@ -281,7 +282,7 @@ INPUT PROVIDED
 
 Topic: {topic}
 Websites/tools to show: {websites_instruction}
-Length: {length} (default 45s)
+Length: {length} (default 60s)
 Profanity rules: {profanity} (default none)
 
 

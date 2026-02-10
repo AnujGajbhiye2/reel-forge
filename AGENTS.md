@@ -3,10 +3,12 @@
 ## Project Structure & Module Organization
 ReelForge is a Python CLI project rooted at `main.py` (entrypoint) and the `reelforge/` package.
 
-- `reelforge/cli/`: Click command wiring and interactive wizard.
-- `reelforge/pipeline/`: end-to-end orchestration, outputs, quality gate, Drive upload.
+- `reelforge/cli/`: Click app wiring, command modules, interactive wizard.
+- `reelforge/pipeline/`: end-to-end orchestration, outputs, quality gate.
 - `reelforge/script/`, `reelforge/audio/`, `reelforge/captions/`, `reelforge/research/`: feature modules.
-- `reelforge/shared/`, `reelforge/core/`: shared config, logging, run context.
+- `reelforge/media/`, `reelforge/animation/`: marker handling and animation utilities.
+- `reelforge/integrations/`: external service adapters (for example Google Drive).
+- `reelforge/shared/`, `reelforge/core/`: shared config, logging, run context primitives.
 - `tests/`: pytest suite (`test_*.py`).
 - `assets/`: fonts, characters, and media inputs.
 - `output/`, `logs/`: generated artifacts and runtime logs.
@@ -19,12 +21,14 @@ source venv/bin/activate
 python main.py --help
 python main.py validate
 python main.py script -t "Your Topic" -s solo
+python main.py generate "Your Topic" -s solo
 pytest -v
 pytest -m integration -v
 ```
 
 - `python main.py --help`: list CLI commands.
 - `python main.py validate`: verify config and local asset paths.
+- `python main.py generate ...`: run end-to-end generation with pipeline defaults.
 - `pytest -v`: run unit/local tests.
 - `pytest -m integration -v`: run tests that call real services (API keys required).
 
@@ -42,7 +46,7 @@ No dedicated formatter/linter config is currently checked in; keep style consist
 - Framework: `pytest` with optional `integration` marker (`pytest.ini`).
 - Name files `test_*.py`; group related assertions in `Test...` classes when useful.
 - Keep unit tests deterministic; integration tests should skip gracefully when credentials/config are unavailable.
-- Add/update tests with behavioral changes, especially in pipeline, script generation, and integrations.
+- Add/update tests with behavioral changes, especially in pipeline, script generation, marker resolution, and integrations.
 
 ## Commit & Pull Request Guidelines
 Recent commits favor short, imperative subjects (example: `Fix video generation: strip markers before TTS...`).

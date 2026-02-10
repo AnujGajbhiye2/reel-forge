@@ -4,8 +4,7 @@ Video composition and rendering using MoviePy.
 
 import os
 import random
-from typing import Callable
-from typing import Dict, Any, List, Optional
+from typing import Any, Callable, Dict, List, Optional
 from pathlib import Path
 
 try:
@@ -767,13 +766,18 @@ class VideoCompositor:
 
                 render_logger = _PercentLogger(progress_callback)
 
+            app_mode = self.config.get("app", {}).get("mode", "dev")
+            render_cfg = self.config.get("render", {})
+            preset = render_cfg.get("preset_dev", "veryfast") if app_mode == "dev" else render_cfg.get("preset_prod", "medium")
+            threads = max(1, int(render_cfg.get("threads", 2)))
+
             final.write_videofile(
                 output_path,
                 fps=self.fps,
                 codec=self.config['output']['codec'],
                 audio_codec=self.config['output']['audio_codec'],
-                preset='medium',
-                threads=4,
+                preset=preset,
+                threads=threads,
                 logger=render_logger,
             )
 

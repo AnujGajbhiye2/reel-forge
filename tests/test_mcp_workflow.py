@@ -177,7 +177,7 @@ class TestOrchestratorIntegration:
         sig = inspect.signature(_run_generate_pipeline)
 
         assert sig.parameters["websites"].default is None
-        assert sig.parameters["length"].default == "45s"
+        assert sig.parameters["length"].default == "60s"
         assert sig.parameters["profanity"].default == "none"
         assert sig.parameters["disable_mcp"].default is False
         assert sig.parameters["image_map_path"].default is None
