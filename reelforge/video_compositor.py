@@ -311,12 +311,26 @@ class VideoCompositor:
         Returns:
             List of TextClip objects
         """
-        # Check if Pillow karaoke renderer is enabled
-        if self.config.get("captions", {}).get("renderer") == "pillow":
+        renderer = str(self.config.get("captions", {}).get("renderer", "textclip")).strip().lower()
+        if renderer == "pillow":
             from reelforge.captions.pillow_renderer import build_karaoke_clips
-            return build_karaoke_clips(captions, font_path, self.config, self.resolution)
 
-        # Fallback to existing TextClip logic
+            pillow_clips = build_karaoke_clips(captions, font_path, self.config, self.resolution)
+            if pillow_clips:
+                return pillow_clips
+
+            self.logger.warning(
+                "Pillow caption renderer produced no clips; falling back to TextClip captions"
+            )
+
+        return self._create_textclip_caption_clips(captions, font_path)
+
+    def _create_textclip_caption_clips(
+        self,
+        captions: List[Dict[str, Any]],
+        font_path: str,
+    ) -> List[TextClip]:
+        """Create caption clips using MoviePy TextClip rendering."""
         clips = []
 
         safe_zone = self.config.get("captions", {}).get("safe_zone", {})
@@ -477,6 +491,7 @@ class VideoCompositor:
         left_x_ratio = float(char_cfg.get("left_x_ratio", 0.08))
         right_x_ratio = float(char_cfg.get("right_x_ratio", 0.60))
         bottom_y = int(char_cfg.get("bottom_y_px", 420))
+        character_height = int(char_cfg.get("height_px", int(self.resolution[1] * 0.32)))
         active_opacity = float(char_cfg.get("active_opacity", 1.0))
         inactive_opacity = float(char_cfg.get("inactive_opacity", 0.08))
         inactive_mode = str(char_cfg.get("inactive_mode", "hidden")).strip().lower()
@@ -546,7 +561,7 @@ class VideoCompositor:
                     char_a_file = str(pose_path)
 
             # Create left character clip
-            left = ImageClip(char_a_file).with_start(start).with_duration(clip_duration).resized(height=420)
+            left = ImageClip(char_a_file).with_start(start).with_duration(clip_duration).resized(height=character_height)
 
             # Apply animation if animator available
             if animator and rate is not None and audio_data is not None:
@@ -576,7 +591,7 @@ class VideoCompositor:
                     char_b_file = str(pose_path)
 
             # Create right character clip
-            right = ImageClip(char_b_file).with_start(start).with_duration(clip_duration).resized(height=420)
+            right = ImageClip(char_b_file).with_start(start).with_duration(clip_duration).resized(height=character_height)
 
             # Apply animation if animator available
             if animator and rate is not None and audio_data is not None:
@@ -611,10 +626,15 @@ class VideoCompositor:
 
         overlay_cfg = self.config.get("research", {}).get("overlay", {})
         width_ratio = float(overlay_cfg.get("width_ratio", 0.78))
-        y_px = int(overlay_cfg.get("y_px", self.config.get("video", {}).get("layout", {}).get("top_reserved_px", 420) - 280))
+        top_reserved_px = int(self.config.get("video", {}).get("layout", {}).get("top_reserved_px", 420))
+        y_px = int(overlay_cfg.get("y_px", 42))
         crossfade_sec = float(overlay_cfg.get("crossfade_sec", 0.2))
+        top_margin_px = int(overlay_cfg.get("top_margin_px", 24))
+        bottom_margin_px = int(overlay_cfg.get("bottom_margin_px", 18))
+        max_height_ratio = float(overlay_cfg.get("max_height_ratio", 0.85))
 
         card_w = max(1, int(self.resolution[0] * width_ratio))
+        max_card_height = max(1, int(top_reserved_px * max_height_ratio))
         clips: List[ImageClip] = []
 
         for shot in screenshots_data:
@@ -631,8 +651,12 @@ class VideoCompositor:
                 continue
 
             image = ImageClip(image_path).resized(width=card_w)
+            if image.h > max_card_height:
+                image = image.resized(height=max_card_height)
             x = (self.resolution[0] - image.w) // 2
-            y = max(40, y_px)
+            default_centered_y = max(top_margin_px, (top_reserved_px - image.h) // 2)
+            y = max(top_margin_px, min(y_px, default_centered_y))
+            y = min(y, max(top_margin_px, top_reserved_px - image.h - bottom_margin_px))
             image = image.with_position((x, y)).with_start(start).with_duration(clip_duration)
             if hasattr(image, "with_opacity"):
                 image = image.with_opacity(1.0)

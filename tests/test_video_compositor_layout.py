@@ -12,6 +12,7 @@ def _make_config(inactive_mode="hidden"):
                 "left_x_ratio": 0.08,
                 "right_x_ratio": 0.60,
                 "bottom_y_px": 460,
+                "height_px": 620,
                 "active_opacity": 1.0,
                 "inactive_opacity": 0.05,
                 "inactive_mode": inactive_mode,
@@ -146,6 +147,33 @@ def test_create_screenshot_clips_creates_card_layers(monkeypatch, tmp_path):
     assert len(clips) == 3
     assert all(c.start == 1.0 for c in clips)
     assert all(c.duration == 3.0 for c in clips)
+
+
+def test_caption_renderer_falls_back_when_pillow_returns_no_clips(monkeypatch):
+    import sys
+    import types
+    import reelforge.video_compositor as vc
+
+    config = _make_config()
+    config["captions"]["renderer"] = "pillow"
+    compositor = VideoCompositor(config)
+
+    fake_renderer = types.ModuleType("reelforge.captions.pillow_renderer")
+    fake_renderer.build_karaoke_clips = lambda *_args, **_kwargs: []
+    monkeypatch.setitem(sys.modules, "reelforge.captions", types.ModuleType("reelforge.captions"))
+    monkeypatch.setitem(sys.modules, "reelforge.captions.pillow_renderer", fake_renderer)
+    monkeypatch.setattr(
+        vc.VideoCompositor,
+        "_create_textclip_caption_clips",
+        lambda _self, _captions, _font_path: ["fallback"],
+    )
+
+    result = compositor.create_caption_clips(
+        [{"text": "hello", "start": 0.0, "end": 1.0, "words": [{"word": "hello", "start": 0.0, "end": 1.0}]}],
+        font_path="fake.ttf",
+    )
+
+    assert result == ["fallback"]
 
 
 def test_set_position_compat_prefers_with_position():

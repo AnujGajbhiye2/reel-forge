@@ -276,6 +276,44 @@ class TestMarkerResolver:
         assert screenshots_data[1]["file"] == "/path/codex.png"
         assert screenshots_data[1]["start"] == 1.8  # Start of "too"
 
+    def test_resolve_multiple_markers_avoids_time_overlap(self):
+        """Markers close together should get non-overlapping display windows."""
+        from reelforge.media.marker_resolver import MarkerResolver
+
+        config = {
+            "screenshots": {
+                "duration_seconds": 4.0,
+                "min_duration_seconds": 0.5,
+                "max_duration_seconds": 6.0,
+            }
+        }
+        resolver = MarkerResolver(config)
+
+        script_with_markers = ScriptWithMarkers(
+            dialogue_text="A: one [SHOW:S1] two [SHOW:S2] three",
+            keyword_map={"S1": "cursor", "S2": "codex"},
+            marker_positions=[
+                MarkerPosition(marker_id="S1", character="A", line_index=0, word_offset=1),
+                MarkerPosition(marker_id="S2", character="A", line_index=0, word_offset=2),
+            ],
+        )
+
+        word_captions = [
+            {"word": "one", "start": 0.0, "end": 0.4},
+            {"word": "two", "start": 0.45, "end": 0.8},
+            {"word": "three", "start": 0.9, "end": 1.4},
+            {"word": "tail", "start": 1.45, "end": 2.8},
+        ]
+
+        id_to_path = {"S1": "/path/s1.png", "S2": "/path/s2.png"}
+        screenshots_data = resolver.resolve_markers_to_timestamps(
+            script_with_markers, word_captions, id_to_path
+        )
+
+        assert len(screenshots_data) == 2
+        assert screenshots_data[0]["start"] < screenshots_data[0]["end"]
+        assert screenshots_data[0]["end"] <= screenshots_data[1]["start"]
+
 
 class TestReelTitleFiltering:
     """Tests for REEL TITLE line filtering."""
